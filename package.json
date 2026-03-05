@@ -1,0 +1,19 @@
+{
+  "name": "lazyskill",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "skill": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "bun build ./src/cli.ts --compile --outfile dist/skill",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
