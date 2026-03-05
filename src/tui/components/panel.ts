@@ -23,13 +23,17 @@ export interface PanelOptions {
   width: number
   height: number
   active: boolean
+  // Visual mode support
+  visualMode?: boolean
+  visualStart?: number
+  visualEnd?: number
 }
 
 /**
  * Render a panel with title and items
  */
 export function renderPanel(options: PanelOptions): string[] {
-  const { title, items, selected, width, height, active } = options
+  const { title, items, selected, width, height, active, visualMode, visualStart = 0, visualEnd = 0 } = options
   const lines: string[] = []
 
   // Panel border color
@@ -44,12 +48,24 @@ export function renderPanel(options: PanelOptions): string[] {
   // Content lines
   const contentHeight = Math.max(1, height - 2) // Reserve 2 lines for top/bottom border
 
+  // Calculate visual selection range
+  const visualMin = Math.min(visualStart, visualEnd)
+  const visualMax = Math.max(visualStart, visualEnd)
+
   for (let i = 0; i < contentHeight; i++) {
     const item = items[i]
     if (item !== undefined) {
-      const isSelected = i === selected
-      const prefix = isSelected ? '▶ ' : '  '
+      const isCurrentSelected = i === selected
+      const isInVisualRange = visualMode && i >= visualMin && i <= visualMax
       let displayItem = item
+
+      // Determine prefix based on selection state
+      let prefix = '  '
+      if (isInVisualRange) {
+        prefix = '■ ' // Selected in visual mode
+      } else if (isCurrentSelected) {
+        prefix = '▶ '
+      }
 
       // Truncate if too long
       const maxLen = width - 4 // Border chars + prefix
@@ -61,9 +77,12 @@ export function renderPanel(options: PanelOptions): string[] {
       const paddedItem = (prefix + displayItem).padEnd(width - 2)
       const content = paddedItem.slice(0, width - 2)
 
-      if (isSelected && active) {
+      if (isInVisualRange && active) {
+        // Visual selection highlight with magenta
         lines.push(`${borderColor}│${ANSI.inverse}${content}${ANSI.reset}${borderColor}│${ANSI.reset}`)
-      } else if (isSelected) {
+      } else if (isCurrentSelected && active) {
+        lines.push(`${borderColor}│${ANSI.inverse}${content}${ANSI.reset}${borderColor}│${ANSI.reset}`)
+      } else if (isCurrentSelected) {
         lines.push(`${borderColor}│${ANSI.dim}${content}${ANSI.reset}${borderColor}│${ANSI.reset}`)
       } else {
         lines.push(`${borderColor}│${content}${borderColor}│${ANSI.reset}`)

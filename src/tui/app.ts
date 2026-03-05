@@ -16,6 +16,14 @@ export interface AppState {
   currentPanel: PanelType
   selectedIndex: number
   running: boolean
+  // Search state
+  searchMode: boolean
+  searchQuery: string
+  filteredSkills: SkillMeta[]
+  // Visual mode state
+  visualMode: boolean
+  visualStart: number
+  visualEnd: number
 }
 
 // Terminal size
@@ -37,6 +45,7 @@ const ANSI = {
   blue: '\x1b[34m',
   magenta: '\x1b[35m',
   white: '\x1b[37m',
+  red: '\x1b[31m',
   bgBlue: '\x1b[44m',
   inverse: '\x1b[7m',
 }
@@ -57,6 +66,40 @@ function clearScreen(): void {
 }
 
 /**
+ * Filter skills based on search query
+ */
+function filterSkills(skills: SkillMeta[], query: string): SkillMeta[] {
+  if (!query) return skills
+  const q = query.toLowerCase()
+  return skills.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    s.id.toLowerCase().includes(q) ||
+    (s.description && s.description.toLowerCase().includes(q))
+  )
+}
+
+/**
+ * Get selected indices in visual mode
+ */
+function getVisualSelection(state: AppState): number[] {
+  if (!state.visualMode) return [state.selectedIndex]
+  const start = Math.min(state.visualStart, state.visualEnd)
+  const end = Math.max(state.visualStart, state.visualEnd)
+  const indices: number[] = []
+  for (let i = start; i <= end; i++) {
+    indices.push(i)
+  }
+  return indices
+}
+
+/**
+ * Get count of selected items
+ */
+function getSelectedCount(state: AppState): number {
+  return getVisualSelection(state).length
+}
+
+/**
  * Render the full TUI layout
  */
 function render(state: AppState): void {
@@ -73,12 +116,25 @@ function render(state: AppState): void {
   const panelCount = 3
   const eachPanelHeight = Math.floor(availableHeight / panelCount)
 
-  // Render header
-  console.log(`${ANSI.bold}${ANSI.cyan}LazySkill${ANSI.reset} - Cross-tool skill manager`)
+  // Render header with search/visual mode indicator
+  if (state.searchMode) {
+    const searchPrompt = `${ANSI.bold}${ANSI.cyan}LazySkill${ANSI.reset} - Search: ${ANSI.yellow}${state.searchQuery}${ANSI.reset}${ANSI.inverse} ${ANSI.reset}`
+    console.log(searchPrompt)
+  } else if (state.visualMode) {
+    const selectedCount = getSelectedCount(state)
+    console.log(`${ANSI.bold}${ANSI.cyan}LazySkill${ANSI.reset} - ${ANSI.magenta}[VISUAL]${ANSI.reset} ${ANSI.yellow}${selectedCount} selected${ANSI.reset}`)
+  } else if (state.searchQuery) {
+    console.log(`${ANSI.bold}${ANSI.cyan}LazySkill${ANSI.reset} - Cross-tool skill manager ${ANSI.dim}[Search: ${state.searchQuery}]${ANSI.reset}`)
+  } else {
+    console.log(`${ANSI.bold}${ANSI.cyan}LazySkill${ANSI.reset} - Cross-tool skill manager`)
+  }
   console.log('')
 
+  // Get filtered or all skills based on search query
+  const displaySkills = state.searchQuery ? state.filteredSkills : state.skills
+
   // Get items for each panel
-  const skillItems = state.skills.map(s => s.name)
+  const skillItems = displaySkills.map(s => s.name)
   const sourceItems = state.config.sources.map(s => `${s.name}${s.enabled ? '' : ' (disabled)'}`)
   const targetItems = state.config.targets.map(t => `${t.name}${t.enabled ? '' : ' (disabled)'}`)
 
@@ -90,6 +146,9 @@ function render(state: AppState): void {
     width: leftWidth,
     height: eachPanelHeight,
     active: state.currentPanel === 'skills',
+    visualMode: state.visualMode && state.currentPanel === 'skills',
+    visualStart: state.visualStart,
+    visualEnd: state.visualEnd,
   })
 
   // Sources panel
@@ -114,8 +173,8 @@ function render(state: AppState): void {
 
   // Get selected item for detail panel
   let selectedItem: SkillMeta | SourceConfig | TargetConfig | null = null
-  if (state.currentPanel === 'skills' && state.skills[state.selectedIndex]) {
-    selectedItem = state.skills[state.selectedIndex]
+  if (state.currentPanel === 'skills' && displaySkills[state.selectedIndex]) {
+    selectedItem = displaySkills[state.selectedIndex]
   } else if (state.currentPanel === 'sources' && state.config.sources[state.selectedIndex]) {
     selectedItem = state.config.sources[state.selectedIndex]
   } else if (state.currentPanel === 'targets' && state.config.targets[state.selectedIndex]) {
@@ -154,14 +213,18 @@ function render(state: AppState): void {
 
   // Render status bar
   const statusBar = renderStatusBar({
-    shortcuts: [
+    shortcuts: state.visualMode ? [
+      { key: 'j/k', action: 'Extend selection' },
+      { key: 'i', action: 'Install selected' },
+      { key: 'u', action: 'Uninstall selected' },
+      { key: 'Esc', action: 'Exit visual' },
+    ] : [
       { key: 'Tab', action: 'Switch panel' },
       { key: '↑/↓', action: 'Navigate' },
-      { key: 'Enter', action: 'Select' },
+      { key: 'v', action: 'Visual mode' },
       { key: 'i', action: 'Install' },
       { key: 'u', action: 'Uninstall' },
       { key: '/', action: 'Search' },
-      { key: 'r', action: 'Refresh' },
       { key: 'q', action: 'Quit' },
     ],
     width: terminalWidth,
@@ -189,6 +252,18 @@ function padLine(line: string, width: number): string {
  * Handle keyboard input
  */
 function handleKey(key: string, state: AppState): void {
+  // Handle search mode input
+  if (state.searchMode) {
+    handleSearchModeKey(key, state)
+    return
+  }
+
+  // Handle Escape key to exit visual mode
+  if (key === '\x1b' && state.visualMode) {
+    state.visualMode = false
+    return
+  }
+
   switch (key) {
     case 'q':
     case '\x03': // Ctrl+C
@@ -200,12 +275,18 @@ function handleKey(key: string, state: AppState): void {
       const currentIndex = panels.indexOf(state.currentPanel)
       state.currentPanel = panels[(currentIndex + 1) % panels.length]
       state.selectedIndex = 0
+      // Exit visual mode when switching panels
+      state.visualMode = false
       break
 
     case '\x1b[A': // Up arrow
     case 'k':
       if (state.selectedIndex > 0) {
         state.selectedIndex--
+        // In visual mode, extend selection
+        if (state.visualMode) {
+          state.visualEnd = state.selectedIndex
+        }
       }
       break
 
@@ -214,12 +295,31 @@ function handleKey(key: string, state: AppState): void {
       const maxIndex = getMaxIndex(state)
       if (state.selectedIndex < maxIndex) {
         state.selectedIndex++
+        // In visual mode, extend selection
+        if (state.visualMode) {
+          state.visualEnd = state.selectedIndex
+        }
       }
       break
 
     case '\r': // Enter
     case '\n':
       handleSelect(state)
+      break
+
+    case 'v':
+      // Toggle visual mode (only in skills panel)
+      if (state.currentPanel === 'skills') {
+        if (state.visualMode) {
+          // Exit visual mode
+          state.visualMode = false
+        } else {
+          // Enter visual mode
+          state.visualMode = true
+          state.visualStart = state.selectedIndex
+          state.visualEnd = state.selectedIndex
+        }
+      }
       break
 
     case 'i':
@@ -235,8 +335,64 @@ function handleKey(key: string, state: AppState): void {
       break
 
     case '/':
-      // TODO: Implement search in Task 15.1
+      // Enter search mode
+      state.searchMode = true
+      state.searchQuery = ''
+      state.currentPanel = 'skills' // Search only works in skills panel
+      state.visualMode = false // Exit visual mode when entering search
       break
+  }
+}
+
+/**
+ * Handle keyboard input in search mode
+ */
+function handleSearchModeKey(key: string, state: AppState): void {
+  switch (key) {
+    case '\x1b': // Escape - cancel search
+      state.searchMode = false
+      state.searchQuery = ''
+      state.filteredSkills = []
+      state.selectedIndex = 0
+      break
+
+    case '\r': // Enter - confirm search
+    case '\n':
+      state.searchMode = false
+      // Keep the search query and filtered results
+      break
+
+    case '\x7f': // Backspace
+    case '\b':
+      if (state.searchQuery.length > 0) {
+        state.searchQuery = state.searchQuery.slice(0, -1)
+        updateFilteredSkills(state)
+      }
+      break
+
+    default:
+      // Add printable characters to search query
+      if (key.length === 1 && key >= ' ' && key <= '~') {
+        state.searchQuery += key
+        updateFilteredSkills(state)
+      }
+      break
+  }
+}
+
+/**
+ * Update filtered skills based on current search query
+ */
+function updateFilteredSkills(state: AppState): void {
+  if (state.searchQuery) {
+    state.filteredSkills = filterSkills(state.skills, state.searchQuery)
+    // Reset selection if it's out of bounds
+    if (state.selectedIndex >= state.filteredSkills.length) {
+      state.selectedIndex = Math.max(0, state.filteredSkills.length - 1)
+    }
+  } else {
+    state.filteredSkills = []
+    state.selectedIndex = 0
   }
 }
 
@@ -244,9 +400,10 @@ function handleKey(key: string, state: AppState): void {
  * Get max index for current panel
  */
 function getMaxIndex(state: AppState): number {
+  const displaySkills = state.searchQuery ? state.filteredSkills : state.skills
   switch (state.currentPanel) {
     case 'skills':
-      return state.skills.length - 1
+      return displaySkills.length - 1
     case 'sources':
       return state.config.sources.length - 1
     case 'targets':
@@ -269,37 +426,66 @@ async function handleSelect(state: AppState): Promise<void> {
  * Handle install action
  */
 async function handleInstall(state: AppState): Promise<void> {
-  if (state.currentPanel === 'skills' && state.skills[state.selectedIndex]) {
-    const skill = state.skills[state.selectedIndex]
+  const displaySkills = state.searchQuery ? state.filteredSkills : state.skills
+
+  if (state.currentPanel === 'skills') {
+    // Get selected indices (single or multiple in visual mode)
+    const selectedIndices = state.visualMode ? getVisualSelection(state) : [state.selectedIndex]
+    const skillsToInstall = selectedIndices
+      .map(i => displaySkills[i])
+      .filter((s): s is SkillMeta => s !== undefined)
+
+    if (skillsToInstall.length === 0) return
+
+    const skillCount = skillsToInstall.length
+    const skillNames = skillsToInstall.map(s => s.name).join(', ')
 
     // Show a quick message
     process.stdout.write('\x1b[s') // Save cursor
     process.stdout.write(`\x1b[${terminalHeight};0H`) // Move to bottom
-    process.stdout.write(`${ANSI.yellow}Installing ${skill.name}...${ANSI.reset}`)
+    if (skillCount === 1) {
+      process.stdout.write(`${ANSI.yellow}Installing ${skillsToInstall[0].name}...${ANSI.reset}`)
+    } else {
+      process.stdout.write(`${ANSI.yellow}Installing ${skillCount} skills...${ANSI.reset}`)
+    }
     process.stdout.write('\x1b[u') // Restore cursor
 
-    try {
-      // Find source config for this skill
-      const sourceConfig = state.config.sources.find(s => s.name === skill._source)
-      if (sourceConfig) {
-        const content = await providerRegistry.fetchContent(skill, sourceConfig)
-        await targetRegistry.installToAll(
-          content,
-          state.config.targets.filter(t => t.enabled),
-          'global'
-        )
+    let successCount = 0
+    let failCount = 0
 
-        process.stdout.write('\x1b[s')
-        process.stdout.write(`\x1b[${terminalHeight};0H`)
-        process.stdout.write(`${ANSI.green}Installed ${skill.name} successfully!${ANSI.reset}  `)
-        process.stdout.write('\x1b[u')
+    for (const skill of skillsToInstall) {
+      try {
+        // Find source config for this skill
+        const sourceConfig = state.config.sources.find(s => s.name === skill._source)
+        if (sourceConfig) {
+          const content = await providerRegistry.fetchContent(skill, sourceConfig)
+          await targetRegistry.installToAll(
+            content,
+            state.config.targets.filter(t => t.enabled),
+            'global'
+          )
+          successCount++
+        }
+      } catch (error) {
+        failCount++
       }
-    } catch (error) {
-      process.stdout.write('\x1b[s')
-      process.stdout.write(`\x1b[${terminalHeight};0H`)
-      process.stdout.write(`${ANSI.reset}Failed to install: ${error}${ANSI.reset}  `)
-      process.stdout.write('\x1b[u')
     }
+
+    process.stdout.write('\x1b[s')
+    process.stdout.write(`\x1b[${terminalHeight};0H`)
+    if (failCount === 0) {
+      if (skillCount === 1) {
+        process.stdout.write(`${ANSI.green}Installed ${skillsToInstall[0].name} successfully!${ANSI.reset}  `)
+      } else {
+        process.stdout.write(`${ANSI.green}Installed ${successCount}/${skillCount} skills successfully!${ANSI.reset}  `)
+      }
+    } else {
+      process.stdout.write(`${ANSI.yellow}Installed ${successCount}/${skillCount} (${failCount} failed)${ANSI.reset}  `)
+    }
+    process.stdout.write('\x1b[u')
+
+    // Exit visual mode after action
+    state.visualMode = false
   }
 }
 
@@ -307,31 +493,59 @@ async function handleInstall(state: AppState): Promise<void> {
  * Handle uninstall action
  */
 async function handleUninstall(state: AppState): Promise<void> {
-  if (state.currentPanel === 'skills' && state.skills[state.selectedIndex]) {
-    const skill = state.skills[state.selectedIndex]
+  const displaySkills = state.searchQuery ? state.filteredSkills : state.skills
+
+  if (state.currentPanel === 'skills') {
+    // Get selected indices (single or multiple in visual mode)
+    const selectedIndices = state.visualMode ? getVisualSelection(state) : [state.selectedIndex]
+    const skillsToUninstall = selectedIndices
+      .map(i => displaySkills[i])
+      .filter((s): s is SkillMeta => s !== undefined)
+
+    if (skillsToUninstall.length === 0) return
+
+    const skillCount = skillsToUninstall.length
 
     process.stdout.write('\x1b[s')
     process.stdout.write(`\x1b[${terminalHeight};0H`)
-    process.stdout.write(`${ANSI.yellow}Uninstalling ${skill.name}...${ANSI.reset}`)
+    if (skillCount === 1) {
+      process.stdout.write(`${ANSI.yellow}Uninstalling ${skillsToUninstall[0].name}...${ANSI.reset}`)
+    } else {
+      process.stdout.write(`${ANSI.yellow}Uninstalling ${skillCount} skills...${ANSI.reset}`)
+    }
     process.stdout.write('\x1b[u')
 
-    try {
-      await targetRegistry.uninstallFromAll(
-        skill.id,
-        state.config.targets.filter(t => t.enabled),
-        'global'
-      )
+    let successCount = 0
+    let failCount = 0
 
-      process.stdout.write('\x1b[s')
-      process.stdout.write(`\x1b[${terminalHeight};0H`)
-      process.stdout.write(`${ANSI.green}Uninstalled ${skill.name} successfully!${ANSI.reset}  `)
-      process.stdout.write('\x1b[u')
-    } catch (error) {
-      process.stdout.write('\x1b[s')
-      process.stdout.write(`\x1b[${terminalHeight};0H`)
-      process.stdout.write(`${ANSI.reset}Failed to uninstall: ${error}${ANSI.reset}  `)
-      process.stdout.write('\x1b[u')
+    for (const skill of skillsToUninstall) {
+      try {
+        await targetRegistry.uninstallFromAll(
+          skill.id,
+          state.config.targets.filter(t => t.enabled),
+          'global'
+        )
+        successCount++
+      } catch (error) {
+        failCount++
+      }
     }
+
+    process.stdout.write('\x1b[s')
+    process.stdout.write(`\x1b[${terminalHeight};0H`)
+    if (failCount === 0) {
+      if (skillCount === 1) {
+        process.stdout.write(`${ANSI.green}Uninstalled ${skillsToUninstall[0].name} successfully!${ANSI.reset}  `)
+      } else {
+        process.stdout.write(`${ANSI.green}Uninstalled ${successCount}/${skillCount} skills successfully!${ANSI.reset}  `)
+      }
+    } else {
+      process.stdout.write(`${ANSI.yellow}Uninstalled ${successCount}/${skillCount} (${failCount} failed)${ANSI.reset}  `)
+    }
+    process.stdout.write('\x1b[u')
+
+    // Exit visual mode after action
+    state.visualMode = false
   }
 }
 
@@ -423,6 +637,14 @@ export async function runApp(): Promise<void> {
     currentPanel: 'skills',
     selectedIndex: 0,
     running: true,
+    // Search state
+    searchMode: false,
+    searchQuery: '',
+    filteredSkills: [],
+    // Visual mode state
+    visualMode: false,
+    visualStart: 0,
+    visualEnd: 0,
   }
 
   if (skills.length === 0) {
