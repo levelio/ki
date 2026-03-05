@@ -1,6 +1,7 @@
 // src/providers/registry.ts
 import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
 import { LocalProvider } from './local'
+import { GitProvider } from './git'
 
 class ProviderRegistry {
   private providers: Map<string, Provider> = new Map()
@@ -8,6 +9,7 @@ class ProviderRegistry {
   constructor() {
     // Register built-in providers
     this.register(new LocalProvider())
+    this.register(new GitProvider())
   }
 
   register(provider: Provider): void {
