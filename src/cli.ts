@@ -11,7 +11,7 @@ import { homedir } from 'os'
 import { computeFileChecksum } from './utils'
 import { DEFAULT_CONFIG } from './types'
 
-const VERSION = '0.1.0'
+const VERSION = '0.1.1'
 
 // Data paths
 const DATA_DIR = join(homedir(), '.config', 'ki')
@@ -69,10 +69,10 @@ function parseFlags(args: string[]): Record<string, any> {
 
 function showHelp() {
   console.log(`
-skill v${VERSION} - LazySkill CLI
+ki v${VERSION} - Cross-tool Skill Manager
 
 Usage:
-  skill <command> [options]
+  ki <command> [options]
 
 Commands:
   init                  Initialize config file with defaults
@@ -84,12 +84,12 @@ Commands:
   target <cmd>          Manage targets
 
 Source Commands:
-  skill source list           List all sources
-  skill source sync [name]    Sync all sources or a specific source
-  skill source skills [name]  List skills in a specific source
+  ki source list           List all sources
+  ki source sync [name]    Sync all sources or a specific source
+  ki source skills [name]  List skills in a specific source
 
 Target Commands:
-  skill target list     List all targets
+  ki target list     List all targets
 
 Options:
   --installed           Filter installed skills only
@@ -101,16 +101,16 @@ Options:
   --help, -h            Show this help
 
 Examples:
-  skill init                        Initialize config file
-  skill list                        List all skills
-  skill list --installed            List installed skills
-  skill install                     Interactive multi-select
-  skill install brainstorming       Search + multi-select
-  skill install superpowers:brainstorming  Direct install by ID
-  skill install -t claude-code,cursor      With specific targets
-  skill uninstall                   Interactive multi-select
-  skill update                      Update all installed skills
-  skill source sync                 Sync all sources
+  ki init                        Initialize config file
+  ki list                        List all skills
+  ki list --installed            List installed skills
+  ki install                     Interactive multi-select
+  ki install brainstorming       Search + multi-select
+  ki install superpowers:brainstorming  Direct install by ID
+  ki install -t claude-code,cursor      With specific targets
+  ki uninstall                   Interactive multi-select
+  ki update                      Update all installed skills
+  ki source sync                 Sync all sources
 `)
 }
 
@@ -682,11 +682,11 @@ async function main() {
       } else {
         console.log(`
 Source commands:
-  skill source list             List all sources
-  skill source sync [name]      Sync all sources or a specific source
-  skill source skills [name]    List skills in a specific source
-  skill source enable <name>    Enable a source
-  skill source disable <name>   Disable a source
+  ki source list             List all sources
+  ki source sync [name]      Sync all sources or a specific source
+  ki source skills [name]    List skills in a specific source
+  ki source enable <name>    Enable a source
+  ki source disable <name>   Disable a source
 `)
       }
       break
@@ -698,7 +698,7 @@ Source commands:
       } else {
         console.log(`
 Target commands:
-  skill target list     List all targets
+  ki target list     List all targets
 `)
       }
       break
