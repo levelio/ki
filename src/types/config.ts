@@ -26,6 +26,18 @@ export const DEFAULT_CONFIG: Config = {
       },
       enabled: true,
     },
+    {
+      name: 'ki',
+      provider: 'git',
+      url: 'https://github.com/levelio/ki.git',
+      options: {
+        skillsPath: 'skills',
+        structure: 'nested',
+        skillFile: 'SKILL.md',
+        branch: 'main',
+      },
+      enabled: true,
+    },
   ],
   targets: [
     { name: 'claude-code', enabled: true },
