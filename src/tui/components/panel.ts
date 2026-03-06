@@ -1,5 +1,6 @@
 // src/tui/components/panel.ts
 import type { SkillMeta, SourceConfig, TargetConfig } from '../../types'
+import { computeDiff, type DiffLine } from '../../utils/diff'
 
 // ANSI escape codes
 const ANSI = {
@@ -12,8 +13,11 @@ const ANSI = {
   blue: '\x1b[34m',
   magenta: '\x1b[35m',
   white: '\x1b[37m',
+  red: '\x1b[31m',
   inverse: '\x1b[7m',
   bgBlue: '\x1b[44m',
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
 }
 
 export interface PanelOptions {
@@ -27,13 +31,15 @@ export interface PanelOptions {
   visualMode?: boolean
   visualStart?: number
   visualEnd?: number
+  // Update indicators
+  updateIndicators?: boolean[]
 }
 
 /**
  * Render a panel with title and items
  */
 export function renderPanel(options: PanelOptions): string[] {
-  const { title, items, selected, width, height, active, visualMode, visualStart = 0, visualEnd = 0 } = options
+  const { title, items, selected, width, height, active, visualMode, visualStart = 0, visualEnd = 0, updateIndicators = [] } = options
   const lines: string[] = []
 
   // Panel border color
@@ -57,7 +63,13 @@ export function renderPanel(options: PanelOptions): string[] {
     if (item !== undefined) {
       const isCurrentSelected = i === selected
       const isInVisualRange = visualMode && i >= visualMin && i <= visualMax
+      const hasUpdate = updateIndicators[i]
       let displayItem = item
+
+      // Add update indicator if skill has update
+      if (hasUpdate) {
+        displayItem = displayItem + ' ' + ANSI.yellow + '(update)' + ANSI.reset
+      }
 
       // Determine prefix based on selection state
       let prefix = '  '
@@ -69,8 +81,10 @@ export function renderPanel(options: PanelOptions): string[] {
 
       // Truncate if too long
       const maxLen = width - 4 // Border chars + prefix
-      if (displayItem.length > maxLen) {
-        displayItem = displayItem.slice(0, maxLen - 1) + '…'
+      const plainItem = displayItem.replace(/\x1b\[[0-9;]*m/g, '')
+      if (plainItem.length > maxLen) {
+        // Need to truncate carefully with ANSI codes
+        displayItem = truncate(displayItem, maxLen)
       }
 
       // Pad to fill width
@@ -157,14 +171,20 @@ function renderSkillDetail(skill: SkillMeta, width: number, maxHeight: number): 
   const lines: string[] = []
   const contentWidth = width - 4 // Account for border and padding
 
-  // Name
-  lines.push(`${ANSI.cyan}│${ANSI.reset} ${ANSI.bold}${ANSI.green}${truncate(skill.name, contentWidth)}${ANSI.reset}`.padEnd(width - 1) + `${ANSI.cyan}│${ANSI.reset}`)
+  // Name with update indicator if applicable
+  const updateIndicator = skill._hasUpdate ? ` ${ANSI.yellow}(update)${ANSI.reset}` : ''
+  lines.push(`${ANSI.cyan}│${ANSI.reset} ${ANSI.bold}${ANSI.green}${truncate(skill.name, contentWidth)}${ANSI.reset}${updateIndicator}`.padEnd(width - 1) + `${ANSI.cyan}│${ANSI.reset}`)
 
   // ID
   lines.push(`${ANSI.cyan}│${ANSI.reset} ${ANSI.dim}ID: ${ANSI.reset}${truncate(skill.id, contentWidth - 5)}`.padEnd(width - 1) + `${ANSI.cyan}│${ANSI.reset}`)
 
   // Separator
   lines.push(`${ANSI.cyan}│${'─'.repeat(width - 2)}│${ANSI.reset}`)
+
+  // If skill has update, show diff instead of normal details
+  if (skill._hasUpdate && skill._localContent && skill._remoteContent) {
+    return [...lines, ...renderSkillDiff(skill, width, maxHeight - lines.length - 1)]
+  }
 
   // Description
   if (skill.description) {
@@ -197,6 +217,64 @@ function renderSkillDetail(skill: SkillMeta, width: number, maxHeight: number): 
 
   // Path
   lines.push(`${ANSI.cyan}│${ANSI.reset} ${ANSI.dim}Path: ${ANSI.reset}${truncate(skill._path, contentWidth - 7)}`.padEnd(width - 1) + `${ANSI.cyan}│${ANSI.reset}`)
+
+  return lines
+}
+
+/**
+ * Render diff view for skill with update
+ */
+function renderSkillDiff(skill: SkillMeta, width: number, maxHeight: number): string[] {
+  const lines: string[] = []
+  const contentWidth = width - 4
+
+  // Diff header
+  lines.push(`${ANSI.cyan}│${ANSI.reset} ${ANSI.bold}${ANSI.yellow}Changes Available${ANSI.reset}`)
+  lines.push(`${ANSI.cyan}│${ANSI.reset} ${ANSI.dim}Press 'r' to update${ANSI.reset}`)
+
+  // Separator
+  lines.push(`${ANSI.cyan}│${'─'.repeat(width - 2)}│${ANSI.reset}`)
+
+  // Compute diff
+  const diff = computeDiff(skill._localContent || '', skill._remoteContent || '')
+
+  // Limit diff lines to fit panel
+  const maxDiffLines = maxHeight - lines.length - 1
+  const diffLines = diff.slice(0, Math.max(0, maxDiffLines))
+
+  // Render diff lines with colors
+  for (const diffLine of diffLines) {
+    let lineContent = ''
+    let displayLine = diffLine.content
+
+    // Truncate long lines
+    if (displayLine.length > contentWidth - 3) {
+      displayLine = displayLine.slice(0, contentWidth - 4) + '…'
+    }
+
+    switch (diffLine.type) {
+      case 'add':
+        lineContent = `${ANSI.green}+ ${displayLine}${ANSI.reset}`
+        break
+      case 'remove':
+        lineContent = `${ANSI.red}- ${displayLine}${ANSI.reset}`
+        break
+      case 'context':
+        lineContent = `${ANSI.dim}  ${displayLine}${ANSI.reset}`
+        break
+    }
+
+    // Pad and add borders
+    const plainContent = lineContent.replace(/\x1b\[[0-9;]*m/g, '')
+    const padding = ' '.repeat(Math.max(0, contentWidth - plainContent.length))
+    lines.push(`${ANSI.cyan}│${ANSI.reset} ${lineContent}${padding}`.slice(0, width - 2) + `${ANSI.cyan}│${ANSI.reset}`)
+  }
+
+  // Show count if diff was truncated
+  if (diff.length > maxDiffLines) {
+    const remaining = diff.length - maxDiffLines
+    lines.push(`${ANSI.cyan}│${ANSI.reset} ${ANSI.dim}... ${remaining} more lines ...${ANSI.reset}`.padEnd(width - 1) + `${ANSI.cyan}│${ANSI.reset}`)
+  }
 
   return lines
 }

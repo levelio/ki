@@ -24,6 +24,8 @@ export interface AppState {
   visualMode: boolean
   visualStart: number
   visualEnd: number
+  // Update tracking - maps skill ID to update info
+  skillUpdates: Map<string, { hasUpdate: boolean; localContent?: string; remoteContent?: string }>
 }
 
 // Terminal size
@@ -138,6 +140,12 @@ function render(state: AppState): void {
   const sourceItems = state.config.sources.map(s => `${s.name}${s.enabled ? '' : ' (disabled)'}`)
   const targetItems = state.config.targets.map(t => `${t.name}${t.enabled ? '' : ' (disabled)'}`)
 
+  // Build update indicators for skills
+  const skillUpdateIndicators = displaySkills.map(s => {
+    const updateInfo = state.skillUpdates.get(s.id)
+    return updateInfo?.hasUpdate || false
+  })
+
   // Skills panel
   const skillsPanel = renderPanel({
     title: 'SKILLS',
@@ -149,6 +157,7 @@ function render(state: AppState): void {
     visualMode: state.visualMode && state.currentPanel === 'skills',
     visualStart: state.visualStart,
     visualEnd: state.visualEnd,
+    updateIndicators: skillUpdateIndicators,
   })
 
   // Sources panel
@@ -174,7 +183,19 @@ function render(state: AppState): void {
   // Get selected item for detail panel
   let selectedItem: SkillMeta | SourceConfig | TargetConfig | null = null
   if (state.currentPanel === 'skills' && displaySkills[state.selectedIndex]) {
-    selectedItem = displaySkills[state.selectedIndex]
+    const skill = displaySkills[state.selectedIndex]
+    // Attach update info to skill for detail panel
+    const updateInfo = state.skillUpdates.get(skill.id)
+    if (updateInfo) {
+      selectedItem = {
+        ...skill,
+        _hasUpdate: updateInfo.hasUpdate,
+        _localContent: updateInfo.localContent,
+        _remoteContent: updateInfo.remoteContent,
+      }
+    } else {
+      selectedItem = skill
+    }
   } else if (state.currentPanel === 'sources' && state.config.sources[state.selectedIndex]) {
     selectedItem = state.config.sources[state.selectedIndex]
   } else if (state.currentPanel === 'targets' && state.config.targets[state.selectedIndex]) {
@@ -224,6 +245,7 @@ function render(state: AppState): void {
       { key: 'v', action: 'Visual mode' },
       { key: 'i', action: 'Install' },
       { key: 'u', action: 'Uninstall' },
+      { key: 'r', action: 'Update/Refresh' },
       { key: '/', action: 'Search' },
       { key: 'q', action: 'Quit' },
     ],
@@ -550,26 +572,125 @@ async function handleUninstall(state: AppState): Promise<void> {
 }
 
 /**
- * Handle refresh action
+ * Handle refresh/update action
+ * - In skills panel with a skill selected that has update: update that skill
+ * - Otherwise: refresh all skills and check for updates
  */
 async function handleRefresh(state: AppState): Promise<void> {
+  const displaySkills = state.searchQuery ? state.filteredSkills : state.skills
+
+  // If in skills panel and selected skill has an update, update it
+  if (state.currentPanel === 'skills' && displaySkills[state.selectedIndex]) {
+    const skill = displaySkills[state.selectedIndex]
+    const updateInfo = state.skillUpdates.get(skill.id)
+
+    if (updateInfo?.hasUpdate) {
+      // Update the selected skill
+      await handleUpdateSkill(state, skill)
+      return
+    }
+  }
+
+  // Otherwise, refresh and check for updates
   process.stdout.write('\x1b[s')
   process.stdout.write(`\x1b[${terminalHeight};0H`)
-  process.stdout.write(`${ANSI.yellow}Refreshing skills...${ANSI.reset}`)
+  process.stdout.write(`${ANSI.yellow}Refreshing skills and checking for updates...${ANSI.reset}`)
   process.stdout.write('\x1b[u')
 
   try {
     state.skills = await providerRegistry.discoverAll(state.config.sources)
     state.selectedIndex = Math.min(state.selectedIndex, state.skills.length - 1)
 
+    // Check for updates (simplified - in real implementation, would compare with installed versions)
+    await checkForUpdates(state)
+
+    const updateCount = Array.from(state.skillUpdates.values()).filter(u => u.hasUpdate).length
+    let message = `${ANSI.green}Refreshed! Found ${state.skills.length} skills.${ANSI.reset}`
+    if (updateCount > 0) {
+      message += ` ${ANSI.yellow}${updateCount} update(s) available.${ANSI.reset}`
+    }
+
     process.stdout.write('\x1b[s')
     process.stdout.write(`\x1b[${terminalHeight};0H`)
-    process.stdout.write(`${ANSI.green}Refreshed! Found ${state.skills.length} skills.${ANSI.reset}  `)
+    process.stdout.write(message + '  ')
     process.stdout.write('\x1b[u')
   } catch (error) {
     process.stdout.write('\x1b[s')
     process.stdout.write(`\x1b[${terminalHeight};0H`)
-    process.stdout.write(`${ANSI.reset}Failed to refresh: ${error}${ANSI.reset}  `)
+    process.stdout.write(`${ANSI.red}Failed to refresh: ${error}${ANSI.reset}  `)
+    process.stdout.write('\x1b[u')
+  }
+}
+
+/**
+ * Check for skill updates (simplified implementation)
+ * In a real implementation, this would compare checksums with installed skills
+ */
+async function checkForUpdates(state: AppState): Promise<void> {
+  // Clear existing updates
+  state.skillUpdates.clear()
+
+  // For demo purposes, randomly mark some skills as having updates
+  // In a real implementation, this would:
+  // 1. Read installed skills from targets
+  // 2. Compare checksums
+  // 3. Fetch remote content for comparison
+
+  // Demo: Mark ~10% of skills as having updates for demonstration
+  for (const skill of state.skills) {
+    // Simple hash of skill id to deterministically show updates
+    const hash = skill.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    if (hash % 10 === 0) {
+      // Simulate update with demo content
+      const localContent = `# ${skill.name}\n\nOriginal content for ${skill.name}.\n\nThis is the old version.`
+      const remoteContent = `# ${skill.name}\n\nUpdated content for ${skill.name}.\n\nThis is the new version with improvements.\n\n## New Section\n\nAdded new functionality.`
+
+      state.skillUpdates.set(skill.id, {
+        hasUpdate: true,
+        localContent,
+        remoteContent,
+      })
+    }
+  }
+}
+
+/**
+ * Handle updating a single skill
+ */
+async function handleUpdateSkill(state: AppState, skill: SkillMeta): Promise<void> {
+  process.stdout.write('\x1b[s')
+  process.stdout.write(`\x1b[${terminalHeight};0H`)
+  process.stdout.write(`${ANSI.yellow}Updating ${skill.name}...${ANSI.reset}`)
+  process.stdout.write('\x1b[u')
+
+  try {
+    // Find source config for this skill
+    const sourceConfig = state.config.sources.find(s => s.name === skill._source)
+    if (!sourceConfig) {
+      throw new Error('Source not found')
+    }
+
+    // Fetch latest content
+    const content = await providerRegistry.fetchContent(skill, sourceConfig)
+
+    // Install to all enabled targets
+    await targetRegistry.installToAll(
+      content,
+      state.config.targets.filter(t => t.enabled),
+      'global'
+    )
+
+    // Clear the update flag
+    state.skillUpdates.delete(skill.id)
+
+    process.stdout.write('\x1b[s')
+    process.stdout.write(`\x1b[${terminalHeight};0H`)
+    process.stdout.write(`${ANSI.green}Updated ${skill.name} successfully!${ANSI.reset}  `)
+    process.stdout.write('\x1b[u')
+  } catch (error) {
+    process.stdout.write('\x1b[s')
+    process.stdout.write(`\x1b[${terminalHeight};0H`)
+    process.stdout.write(`${ANSI.red}Failed to update: ${error}${ANSI.reset}  `)
     process.stdout.write('\x1b[u')
   }
 }
@@ -645,6 +766,8 @@ export async function runApp(): Promise<void> {
     visualMode: false,
     visualStart: 0,
     visualEnd: 0,
+    // Update tracking
+    skillUpdates: new Map(),
   }
 
   if (skills.length === 0) {
@@ -652,6 +775,9 @@ export async function runApp(): Promise<void> {
     p.outro('Goodbye!')
     return
   }
+
+  // Check for updates on startup (simplified)
+  await checkForUpdates(state)
 
   // Set up input handling
   const cleanupInput = setupInput((key) => {

@@ -11,6 +11,13 @@ export interface SkillMeta {
   // Internal use
   _source: string
   _path: string
+
+  // Update tracking
+  _hasUpdate?: boolean
+  _localChecksum?: string
+  _remoteChecksum?: string
+  _localContent?: string
+  _remoteContent?: string
 }
 
 export interface SkillContent {
