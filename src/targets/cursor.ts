@@ -1,78 +1,75 @@
 // src/targets/cursor.ts
 import { join } from 'path'
+import { homedir } from 'os'
 import { existsSync } from 'fs'
-import { readFile, writeFile, unlink, mkdir, readdir, rename } from 'fs/promises'
+import { writeFile, unlink, mkdir, readdir, rename, rm } from 'fs/promises'
 import type { Target, InstallOptions, SkillContent, InstalledSkill } from '@/types'
 
 export class CursorTarget implements Target {
   name = 'cursor'
 
   getGlobalPath(): string {
-    // Cursor only supports project-level rules
-    // User Rules are stored in Cursor's internal settings, not filesystem
-    throw new Error('Cursor only supports project-level skill installation')
+    return join(homedir(), '.cursor', 'skills')
   }
 
   getProjectPath(projectPath: string): string {
-    return join(projectPath, '.cursor', 'rules')
+    return join(projectPath, '.cursor', 'skills')
   }
 
   async install(skill: SkillContent, options?: InstallOptions): Promise<void> {
-    if (options?.scope === 'global') {
-      throw new Error('Cursor only supports project-level skill installation')
-    }
+    const basePath = options?.scope === 'project' && options.projectPath
+      ? this.getProjectPath(options.projectPath)
+      : this.getGlobalPath()
 
-    const basePath = this.getProjectPath(options?.projectPath || '.')
-    await mkdir(basePath, { recursive: true })
+    // Each skill is a directory with SKILL.md inside
+    const skillName = this.getSkillName(skill.id)
+    const skillDir = join(basePath, skillName)
 
-    const fileName = this.getSkillFileName(skill.id)
-    const filePath = join(basePath, fileName)
+    await mkdir(skillDir, { recursive: true })
 
-    // Cursor uses .mdc format with YAML frontmatter
-    const mdcContent = this.toMdcFormat(skill)
-    await writeFile(filePath, mdcContent, 'utf-8')
+    // Write SKILL.md with frontmatter
+    const skillContent = this.toSkillFormat(skill)
+    await writeFile(join(skillDir, 'SKILL.md'), skillContent, 'utf-8')
   }
 
   async uninstall(skillId: string, options?: InstallOptions): Promise<void> {
-    if (options?.scope === 'global') {
-      throw new Error('Cursor only supports project-level skill installation')
-    }
+    const basePath = options?.scope === 'project' && options.projectPath
+      ? this.getProjectPath(options.projectPath)
+      : this.getGlobalPath()
 
-    const basePath = this.getProjectPath(options?.projectPath || '.')
-    const fileName = this.getSkillFileName(skillId)
-    const filePath = join(basePath, fileName)
+    const skillName = this.getSkillName(skillId)
+    const skillDir = join(basePath, skillName)
 
-    if (existsSync(filePath)) {
-      await unlink(filePath)
+    if (existsSync(skillDir)) {
+      await rm(skillDir, { recursive: true, force: true })
     }
   }
 
   async list(scope: 'global' | 'project', projectPath?: string): Promise<InstalledSkill[]> {
-    if (scope === 'global') {
-      return []
-    }
-
-    const basePath = this.getProjectPath(projectPath || '.')
+    const basePath = scope === 'project' && projectPath
+      ? this.getProjectPath(projectPath)
+      : this.getGlobalPath()
 
     if (!existsSync(basePath)) {
       return []
     }
 
     const skills: InstalledSkill[] = []
-    const entries = await readdir(basePath)
+    const entries = await readdir(basePath, { withFileTypes: true })
 
     for (const entry of entries) {
-      if (!entry.endsWith('.mdc')) continue
-      if (entry.endsWith('.mdc.disabled')) continue
+      if (!entry.isDirectory()) continue
+      if (entry.name.endsWith('.disabled')) continue
 
-      const skillId = entry.replace('.mdc', '').replace(/-/g, ':')
-      const filePath = join(basePath, entry)
+      const skillFile = join(basePath, entry.name, 'SKILL.md')
+      if (!existsSync(skillFile)) continue
 
+      const skillId = entry.name
       skills.push({
         id: skillId,
         source: 'unknown',
         target: this.name,
-        scope: 'project',
+        scope,
         checksum: '',
         installedAt: new Date().toISOString(),
         enabled: true,
@@ -83,40 +80,53 @@ export class CursorTarget implements Target {
   }
 
   async enable(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = this.getProjectPath(options?.projectPath || '.')
-    const disabledPath = join(basePath, `${this.getSkillFileName(skillId)}.disabled`)
-    const enabledPath = join(basePath, this.getSkillFileName(skillId))
+    const basePath = options?.scope === 'project' && options.projectPath
+      ? this.getProjectPath(options.projectPath)
+      : this.getGlobalPath()
 
-    if (existsSync(disabledPath)) {
-      await rename(disabledPath, enabledPath)
+    const skillName = this.getSkillName(skillId)
+    const disabledDir = join(basePath, `${skillName}.disabled`)
+    const enabledDir = join(basePath, skillName)
+
+    if (existsSync(disabledDir)) {
+      await rename(disabledDir, enabledDir)
     }
   }
 
   async disable(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = this.getProjectPath(options?.projectPath || '.')
-    const enabledPath = join(basePath, this.getSkillFileName(skillId))
-    const disabledPath = join(basePath, `${this.getSkillFileName(skillId)}.disabled`)
+    const basePath = options?.scope === 'project' && options.projectPath
+      ? this.getProjectPath(options.projectPath)
+      : this.getGlobalPath()
 
-    if (existsSync(enabledPath)) {
-      await rename(enabledPath, disabledPath)
+    const skillName = this.getSkillName(skillId)
+    const enabledDir = join(basePath, skillName)
+    const disabledDir = join(basePath, `${skillName}.disabled`)
+
+    if (existsSync(enabledDir)) {
+      await rename(enabledDir, disabledDir)
     }
   }
 
-  protected getSkillFileName(skillId: string): string {
+  protected getSkillName(skillId: string): string {
+    // Extract skill name from id (last part after colon)
     const parts = skillId.split(':')
-    return `${parts[parts.length - 1]}.mdc`
+    // Cursor skill name: lowercase letters, numbers, and hyphens only
+    return parts[parts.length - 1].toLowerCase().replace(/[^a-z0-9-]/g, '-')
   }
 
-  protected toMdcFormat(skill: SkillContent): string {
-    // Extract skill name from id (last part after colon)
-    const parts = skill.id.split(':')
-    const skillName = parts[parts.length - 1]
+  protected toSkillFormat(skill: SkillContent): string {
+    const skillName = this.getSkillName(skill.id)
 
-    // Create .mdc format with YAML frontmatter
-    // Cursor rules format: alwaysApply: true makes it always active
+    // Check if content already has frontmatter
+    if (skill.content.trimStart().startsWith('---')) {
+      // Already has frontmatter, use as-is
+      return skill.content
+    }
+
+    // Add frontmatter for Cursor skills
     return `---
-description: Skill: ${skillName}
-alwaysApply: true
+name: ${skillName}
+description: Installed from ${skill.id}
 ---
 
 ${skill.content}`
