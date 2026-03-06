@@ -449,7 +449,7 @@ interface InstalledSkill {
 sources:
   - name: superpowers
     provider: superpowers
-    url: github.com/sst/superpowers-marketplace
+    url: https://github.com/obra/superpowers.git
     enabled: true
 
   - name: community
@@ -498,7 +498,7 @@ const defaultConfig = {
     {
       name: 'superpowers',
       provider: 'superpowers',
-      url: 'github.com/sst/superpowers-marketplace',
+      url: 'https://github.com/obra/superpowers.git',
       enabled: true,
     },
   ],
