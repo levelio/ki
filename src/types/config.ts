@@ -17,7 +17,7 @@ export const DEFAULT_CONFIG: Config = {
     {
       name: 'superpowers',
       provider: 'superpowers',
-      url: 'github.com/sst/superpowers-marketplace',
+      url: 'https://github.com/obra/superpowers.git',
       enabled: true,
     },
   ],

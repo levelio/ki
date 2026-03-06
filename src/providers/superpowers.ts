@@ -7,15 +7,15 @@ import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
 import { computeFileChecksum } from '@/utils'
 
 const CACHE_DIR = join(homedir(), '.config', 'lazyskill', 'cache')
-const DEFAULT_URL = 'https://github.com/sst/superpowers-marketplace.git'
+const DEFAULT_URL = 'https://github.com/obra/superpowers.git'
 
 export class SuperpowersProvider implements Provider {
   name = 'superpowers'
 
   async discover(config: SourceConfig): Promise<SkillMeta[]> {
     const cachePath = await this.ensureCached(config)
-    const version = await this.getVersion(cachePath, config)
-    const skillsPath = join(cachePath, 'superpowers', version, 'skills')
+    // Superpowers uses skills/ at root level
+    const skillsPath = join(cachePath, 'skills')
 
     if (!existsSync(skillsPath)) {
       return []
@@ -28,19 +28,19 @@ export class SuperpowersProvider implements Provider {
       if (!entry.isDirectory()) continue
 
       const skillPath = join(skillsPath, entry.name)
-      const skillFile = join(skillPath, 'skill.md')
+      // Superpowers uses SKILL.md (uppercase)
+      const skillFile = join(skillPath, 'SKILL.md')
 
       if (!existsSync(skillFile)) continue
 
+      // Extract metadata from skill content
       let meta: Partial<SkillMeta> = {}
-      const metaFile = join(skillPath, 'meta.json')
-      if (existsSync(metaFile)) {
-        try {
-          const content = await readFile(metaFile, 'utf-8')
-          meta = JSON.parse(content)
-        } catch {
-          // Ignore parse errors
-        }
+      try {
+        const content = await readFile(skillFile, 'utf-8')
+        meta = this.parseSkillMetadata(content, entry.name)
+      } catch {
+        // Fallback to directory name
+        meta = { name: entry.name }
       }
 
       skills.push({
@@ -69,34 +69,27 @@ export class SuperpowersProvider implements Provider {
     }
   }
 
-  private async getVersion(cachePath: string, config: SourceConfig): Promise<string> {
-    // If version is specified, use it
-    if (config.options?.version) {
-      return config.options.version as string
+  private parseSkillMetadata(content: string, fallbackName: string): Partial<SkillMeta> {
+    const meta: Partial<SkillMeta> = { name: fallbackName }
+
+    // Extract name from first heading
+    const nameMatch = content.match(/^#\s+(.+)$/m)
+    if (nameMatch) {
+      meta.name = nameMatch[1].trim()
     }
 
-    // Otherwise, find the latest version
-    const superpowersPath = join(cachePath, 'superpowers')
-    if (!existsSync(superpowersPath)) {
-      throw new Error('Superpowers directory not found in cache')
+    // Extract description from first paragraph after heading
+    const descMatch = content.match(/^#\s+.+\n\n(.+?)(?:\n\n|\n#|$)/s)
+    if (descMatch) {
+      meta.description = descMatch[1].trim().slice(0, 200)
     }
 
-    const versions = await readdir(superpowersPath)
-    // Sort versions in descending order (assuming semver-like format)
-    const sortedVersions = versions
-      .filter(v => /^\d+\.\d+\.\d+/.test(v))
-      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-
-    if (sortedVersions.length === 0) {
-      throw new Error('No versions found in superpowers directory')
-    }
-
-    return sortedVersions[0]
+    return meta
   }
 
   private async ensureCached(config: SourceConfig): Promise<string> {
     const url = config.url || DEFAULT_URL
-    const cacheName = 'superpowers-marketplace'
+    const cacheName = 'superpowers'
     const cachePath = join(CACHE_DIR, cacheName)
 
     if (existsSync(cachePath)) {
