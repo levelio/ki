@@ -44,11 +44,13 @@ Target = 目标工具的适配器，负责将 skill 写入/移除到对应工具
 
 每个工具的 skill 存放位置：
 
-| 工具 | 全局路径 | 项目路径 |
-|------|----------|----------|
-| Claude Code | `~/.claude/commands/` | `.claude/commands/` |
-| Cursor | - | `.cursor/rules/` |
-| OpenCode | `~/.config/opencode/commands/` | `.opencode/commands/` |
+| 工具 | 全局路径 | 项目路径 | 文件格式 |
+|------|----------|----------|----------|
+| Claude Code | `~/.claude/commands/` | `.claude/commands/` | `.md` |
+| Cursor | - | `.cursor/rules/` | `.mdc` (YAML frontmatter) |
+| OpenCode | `~/.config/opencode/commands/` | `.opencode/commands/` | `.md` |
+
+> **注意**: Cursor 不支持文件系统级别的全局配置，User Rules 存储在应用内部设置中。
 
 ### Provider（发现器）
 
