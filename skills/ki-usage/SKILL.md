@@ -111,9 +111,17 @@ skills/
 ```bash
 ki install                          # 交互式多选
 ki install brainstorming            # 搜索后多选
-ki install superpowers:brainstorming # 直接安装
+ki install superpowers:brainstorming -t claude-code -y  # 非交互式安装
 ki install -t claude-code,cursor    # 指定目标
 ki install --project                # 项目级安装
+```
+
+### 非交互式安装
+
+使用 `-y/--yes` 参数跳过交互式确认（需要同时指定 skill ID 和目标）：
+
+```bash
+ki install superpowers:brainstorming -t claude-code -y
 ```
 
 ## 常见错误

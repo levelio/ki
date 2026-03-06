@@ -97,6 +97,7 @@ Options:
   --global              Install to global scope (default)
   --project             Install to project scope
   -t, --target <list>   Comma-separated target list
+  -y, --yes             Skip interactive prompts (non-interactive mode)
   --version, -v         Show version
   --help, -h            Show this help
 
@@ -106,8 +107,7 @@ Examples:
   ki list --installed            List installed skills
   ki install                     Interactive multi-select
   ki install brainstorming       Search + multi-select
-  ki install superpowers:brainstorming  Direct install by ID
-  ki install -t claude-code,cursor      With specific targets
+  ki install superpowers:brainstorming -t claude-code -y  Direct install (non-interactive)
   ki uninstall                   Interactive multi-select
   ki update                      Update all installed skills
   ki source sync                 Sync all sources
@@ -201,6 +201,7 @@ async function listSkills(config: any, flags: Record<string, any>) {
 
 async function installSkill(config: any, flags: Record<string, any>) {
   const searchQuery = flags._[0]
+  const nonInteractive = flags['y'] || flags['yes']
 
   p.intro(searchQuery ? `Install Skill: ${searchQuery}` : 'Install Skill')
 
@@ -236,27 +237,43 @@ async function installSkill(config: any, flags: Record<string, any>) {
     }
   }
 
-  // Interactive multi-select with search
-  const selectedSkills = await p.autocompleteMultiselect({
-    message: 'Select skills to install (type to search)',
-    options: filteredSkills.map(s => ({
-      value: s.id,
-      label: s.id,
-    })),
-    required: true
-  })
+  // Determine skill IDs to install
+  let skillIds: string[]
 
-  if (p.isCancel(selectedSkills)) {
-    p.outro('Cancelled')
-    return
+  // Non-interactive mode: if exact match found and target specified, skip prompts
+  if (nonInteractive && filteredSkills.length === 1 && (flags['t'] || flags['target'])) {
+    skillIds = [filteredSkills[0].id]
+  } else {
+    // Interactive multi-select with search
+    const selectedSkills = await p.autocompleteMultiselect({
+      message: 'Select skills to install (type to search)',
+      options: filteredSkills.map(s => ({
+        value: s.id,
+        label: s.id,
+      })),
+      required: true
+    })
+
+    if (p.isCancel(selectedSkills)) {
+      p.outro('Cancelled')
+      return
+    }
+
+    skillIds = selectedSkills as string[]
   }
-
-  const skillIds = selectedSkills as string[]
 
   // Determine targets
   let targets: string[]
   if (flags['t'] || flags['target']) {
     targets = (flags['t'] || flags['target']).split(',').map((t: string) => t.trim())
+  } else if (nonInteractive) {
+    // In non-interactive mode without target, use all enabled targets
+    targets = config.targets.filter((t: any) => t.enabled).map((t: any) => t.name)
+    if (targets.length === 0) {
+      p.log.error('No enabled targets. Specify with -t or enable targets in config.')
+      p.outro('Failed')
+      return
+    }
   } else {
     const enabledTargets = config.targets.filter((t: any) => t.enabled)
     const selected = await p.autocompleteMultiselect({
