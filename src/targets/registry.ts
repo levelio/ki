@@ -2,7 +2,6 @@
 import type { Target, TargetConfig, SkillContent } from '@/types'
 import { ClaudeCodeTarget } from './claude-code'
 import { CursorTarget } from './cursor'
-import { OpenCodeTarget } from './opencode'
 
 class TargetRegistry {
   private targets: Map<string, Target> = new Map()
@@ -11,7 +10,6 @@ class TargetRegistry {
     // Register built-in targets
     this.register(new ClaudeCodeTarget())
     this.register(new CursorTarget())
-    this.register(new OpenCodeTarget())
   }
 
   register(target: Target): void {

@@ -24,6 +24,5 @@ export const DEFAULT_CONFIG: Config = {
   targets: [
     { name: 'claude-code', enabled: true },
     { name: 'cursor', enabled: true },
-    { name: 'opencode', enabled: true },
   ],
 }

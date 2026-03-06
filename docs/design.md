@@ -48,7 +48,6 @@ Target = 目标工具的适配器，负责将 skill 写入/移除到对应工具
 |------|----------|----------|----------|
 | Claude Code | `~/.claude/skills/<name>/SKILL.md` | `.claude/skills/<name>/SKILL.md` | 目录 + `SKILL.md` |
 | Cursor | `~/.cursor/skills/<name>/SKILL.md` | `.cursor/skills/<name>/SKILL.md` | 目录 + `SKILL.md` |
-| OpenCode | `~/.config/opencode/commands/<name>.md` | `.opencode/commands/<name>.md` | `.md` |
 
 > **注意**:
 > - Claude Code 和 Cursor 都使用目录结构，每个 skill 是一个包含 `SKILL.md` 的目录
