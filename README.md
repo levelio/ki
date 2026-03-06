@@ -14,15 +14,56 @@
 
 ## 安装
 
-```bash
-# 使用 bun
-bun install -g lazyskill
+### 一键安装（推荐）
 
-# 或从源码构建
-git clone https://github.com/user/lazyskill.git
-cd lazyskill
+```bash
+curl -fsSL https://raw.githubusercontent.com/levelio/ki/main/install.sh | bash
+```
+
+### 手动安装
+
+从 [Releases](https://github.com/levelio/ki/releases) 下载对应平台的二进制文件：
+
+```bash
+# macOS (ARM)
+curl -L https://github.com/levelio/ki/releases/latest/download/ki-darwin-arm64 -o ki
+chmod +x ki
+sudo mv ki /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/levelio/ki/releases/latest/download/ki-darwin-x64 -o ki
+chmod +x ki
+sudo mv ki /usr/local/bin/
+
+# Linux
+curl -L https://github.com/levelio/ki/releases/latest/download/ki-linux-x64 -o ki
+chmod +x ki
+sudo mv ki /usr/local/bin/
+```
+
+### 从源码构建
+
+```bash
+git clone https://github.com/levelio/ki.git
+cd ki
 bun install
 bun run build
+```
+
+### npm 安装
+
+```bash
+npm install -g ki-skill
+# 或
+bun install -g ki-skill
+```
+
+## 升级
+
+重新运行安装脚本即可升级到最新版本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/levelio/ki/main/install.sh | bash
 ```
 
 ## 快速开始

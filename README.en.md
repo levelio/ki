@@ -14,15 +14,56 @@ A cross-tool Skill Manager that helps you manage and sync skills across multiple
 
 ## Installation
 
-```bash
-# Using bun
-bun install -g lazyskill
+### One-line Install (Recommended)
 
-# Or build from source
-git clone https://github.com/user/lazyskill.git
-cd lazyskill
+```bash
+curl -fsSL https://raw.githubusercontent.com/levelio/ki/main/install.sh | bash
+```
+
+### Manual Install
+
+Download the binary for your platform from [Releases](https://github.com/levelio/ki/releases):
+
+```bash
+# macOS (ARM)
+curl -L https://github.com/levelio/ki/releases/latest/download/ki-darwin-arm64 -o ki
+chmod +x ki
+sudo mv ki /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/levelio/ki/releases/latest/download/ki-darwin-x64 -o ki
+chmod +x ki
+sudo mv ki /usr/local/bin/
+
+# Linux
+curl -L https://github.com/levelio/ki/releases/latest/download/ki-linux-x64 -o ki
+chmod +x ki
+sudo mv ki /usr/local/bin/
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/levelio/ki.git
+cd ki
 bun install
 bun run build
+```
+
+### npm
+
+```bash
+npm install -g ki-skill
+# or
+bun install -g ki-skill
+```
+
+## Upgrading
+
+Run the install script again to upgrade to the latest version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/levelio/ki/main/install.sh | bash
 ```
 
 ## Quick Start

@@ -1,16 +1,24 @@
 {
-  "name": "lazyskill",
+  "name": "ki-skill",
   "version": "0.1.0",
+  "description": "Cross-tool skill manager for AI coding assistants",
+  "author": "Level",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/levelio/ki.git"
+  },
+  "keywords": ["skill", "ai", "claude", "cursor", "cli"],
   "type": "module",
   "bin": {
-    "skill": "./src/cli.ts"
+    "ki": "./src/cli.ts"
   },
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "build": "bun build ./src/cli.ts --compile --outfile dist/skill",
-    "build:macos": "bun build ./src/cli.ts --compile --target=darwin-x64 --outfile dist/skill-darwin-x64 && bun build ./src/cli.ts --compile --target=darwin-arm64 --outfile dist/skill-darwin-arm64",
-    "build:linux": "bun build ./src/cli.ts --compile --target=linux-x64 --outfile dist/skill-linux-x64",
-    "build:windows": "bun build ./src/cli.ts --compile --target=windows-x64 --outfile dist/skill-windows-x64.exe",
+    "build": "bun build ./src/cli.ts --compile --outfile dist/ki",
+    "build:macos": "bun build ./src/cli.ts --compile --target=darwin-x64 --outfile dist/ki-darwin-x64 && bun build ./src/cli.ts --compile --target=darwin-arm64 --outfile dist/ki-darwin-arm64",
+    "build:linux": "bun build ./src/cli.ts --compile --target=linux-x64 --outfile dist/ki-linux-x64",
+    "build:windows": "bun build ./src/cli.ts --compile --target=windows-x64 --outfile dist/ki-windows-x64.exe",
     "build:all": "bun run build:macos && bun run build:linux && bun run build:windows",
     "test": "bun test"
   },
