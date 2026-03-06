@@ -93,17 +93,20 @@ export class SuperpowersProvider implements Provider {
     const cachePath = join(CACHE_DIR, cacheName)
 
     if (existsSync(cachePath)) {
+      // Cache exists, try to update
       try {
         await this.runGit(cachePath, 'fetch')
         await this.runGit(cachePath, 'reset', '--hard', 'origin/main')
-      } catch {
-        await this.removeDir(cachePath)
-        await this.clone(url, cachePath)
+      } catch (error) {
+        // If update fails, just use existing cache
+        console.warn('Failed to update superpowers cache, using existing')
       }
-    } else {
-      await this.clone(url, cachePath)
+      return cachePath
     }
 
+    // Clone new
+    await mkdir(CACHE_DIR, { recursive: true })
+    await this.runGit(CACHE_DIR, 'clone', '--depth', '1', url, cachePath)
     return cachePath
   }
 
