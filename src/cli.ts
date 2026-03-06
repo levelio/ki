@@ -109,6 +109,8 @@ Examples:
   ki install brainstorming       Search + multi-select
   ki install superpowers:brainstorming -t claude-code -y  Direct install (non-interactive)
   ki uninstall                   Interactive multi-select
+  ki uninstall superpowers:brainstorming -y  Direct uninstall (non-interactive)
+  ki uninstall superpowers:brainstorming -t claude-code -y  Uninstall from specific target
   ki update                      Update all installed skills
   ki source sync                 Sync all sources
 `)
@@ -350,6 +352,7 @@ async function installSkill(config: any, flags: Record<string, any>) {
 
 async function uninstallSkill(flags: Record<string, any>) {
   const searchQuery = flags._[0]
+  const nonInteractive = flags['y'] || flags['yes']
 
   p.intro(searchQuery ? `Uninstall: ${searchQuery}` : 'Uninstall Skill')
 
@@ -364,31 +367,81 @@ async function uninstallSkill(flags: Record<string, any>) {
   // Filter by search query
   let filtered = installed
   if (searchQuery) {
-    const query = searchQuery.toLowerCase()
-    filtered = installed.filter(r => r.id.toLowerCase().includes(query))
-    if (filtered.length === 0) {
-      p.log.error(`No installed skills matching: ${searchQuery}`)
-      p.outro('Failed')
-      return
+    // Check if it's an exact skill ID
+    const exactMatch = installed.find(r => r.id === searchQuery)
+    if (exactMatch) {
+      filtered = [exactMatch]
+    } else {
+      const query = searchQuery.toLowerCase()
+      filtered = installed.filter(r => r.id.toLowerCase().includes(query))
+      if (filtered.length === 0) {
+        p.log.error(`No installed skills matching: ${searchQuery}`)
+        p.outro('Failed')
+        return
+      }
     }
   }
 
-  // Interactive multi-select with search
-  const selected = await p.autocompleteMultiselect({
-    message: 'Select skills to uninstall (type to search)',
-    options: filtered.map(r => ({
-      value: r.id,
-      label: r.id,
-    })),
-    required: true
-  })
+  // Determine skill IDs to uninstall
+  let skillIds: string[]
 
-  if (p.isCancel(selected)) {
-    p.outro('Cancelled')
-    return
+  // Non-interactive mode: if exact match found, skip prompts
+  if (nonInteractive && filtered.length === 1) {
+    skillIds = [filtered[0].id]
+  } else {
+    // Interactive multi-select with search
+    const selected = await p.autocompleteMultiselect({
+      message: 'Select skills to uninstall (type to search)',
+      options: filtered.map(r => ({
+        value: r.id,
+        label: r.id,
+      })),
+      required: true
+    })
+
+    if (p.isCancel(selected)) {
+      p.outro('Cancelled')
+      return
+    }
+
+    skillIds = selected as string[]
   }
 
-  const skillIds = selected as string[]
+  // Determine targets to uninstall from
+  let targets: string[]
+  if (flags['t'] || flags['target']) {
+    targets = (flags['t'] || flags['target']).split(',').map((t: string) => t.trim())
+  } else if (nonInteractive) {
+    // In non-interactive mode without target, uninstall from all recorded targets
+    targets = [...new Set(filtered.flatMap(r => r.targets))]
+  } else {
+    // Collect all targets from selected skills
+    const allTargets = [...new Set(
+      skillIds
+        .map(id => installed.find(r => r.id === id))
+        .filter(Boolean)
+        .flatMap(r => r!.targets)
+    )]
+
+    if (allTargets.length === 1) {
+      targets = allTargets
+    } else {
+      const selected = await p.autocompleteMultiselect({
+        message: 'Select targets to uninstall from',
+        options: allTargets.map(t => ({
+          value: t,
+          label: t
+        })),
+        required: true
+      })
+
+      if (p.isCancel(selected)) {
+        p.outro('Cancelled')
+        return
+      }
+      targets = selected as string[]
+    }
+  }
 
   const spinner = p.spinner()
   spinner.start('Uninstalling...')
@@ -399,7 +452,9 @@ async function uninstallSkill(flags: Record<string, any>) {
 
     spinner.message(`Uninstalling ${skillId}...`)
 
-    for (const targetName of record.targets) {
+    for (const targetName of targets) {
+      if (!record.targets.includes(targetName)) continue
+
       const target = targetRegistry.get(targetName)
       if (!target) continue
 
@@ -411,8 +466,17 @@ async function uninstallSkill(flags: Record<string, any>) {
     }
   }
 
-  // Remove from installed records
-  const newInstalled = installed.filter(r => !skillIds.includes(r.id))
+  // Update installed records - remove only from specified targets
+  const newInstalled = installed.map(r => {
+    if (!skillIds.includes(r.id)) return r
+
+    const remainingTargets = r.targets.filter(t => !targets.includes(t))
+    if (remainingTargets.length === 0) {
+      return null // Will be filtered out
+    }
+    return { ...r, targets: remainingTargets }
+  }).filter(Boolean) as InstalledRecord[]
+
   await saveInstalled(newInstalled)
 
   spinner.stop('Done')
