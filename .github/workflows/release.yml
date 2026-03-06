@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact: ki-linux-x64
+          - os: macos-latest
+            target: darwin-arm64
+            artifact: ki-darwin-arm64
+          - os: macos-13
+            target: darwin-x64
+            artifact: ki-darwin-x64
+          - os: windows-latest
+            target: windows-x64
+            artifact: ki-windows-x64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        run: bun build ./src/cli.ts --compile --target=${{ matrix.target }} --outfile ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List files
+        run: ls -la dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ki ${{ github.ref_name }}
+          body: |
+            ## ki ${{ github.ref_name }}
+
+            跨工具 Skill 管理器
+
+            ### 安装
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/levelio/ki/main/install.sh | bash
+            ```
+
+            ### 下载
+            | 平台 | 文件 |
+            |------|------|
+            | macOS (ARM) | `ki-darwin-arm64` |
+            | macOS (Intel) | `ki-darwin-x64` |
+            | Linux | `ki-linux-x64` |
+            | Windows | `ki-windows-x64.exe` |
+
+            ### 变更
+            查看 [commits](https://github.com/levelio/ki/commits/${{ github.ref_name }}) 获取详细变更。
+          files: dist/*
+          draft: false
+          prerelease: false
