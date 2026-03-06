@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import * as p from '@clack/prompts'
 import * as YAML from 'yaml'
-import { loadConfig } from './config'
+import { loadConfig, saveConfig, CONFIG_FILE } from './config'
 import { providerRegistry } from './providers'
 import { targetRegistry } from './targets'
 import { existsSync } from 'fs'
@@ -9,11 +9,12 @@ import { readFile, writeFile, mkdir } from 'fs/promises'
 import { join, dirname } from 'path'
 import { homedir } from 'os'
 import { computeFileChecksum } from './utils'
+import { DEFAULT_CONFIG } from './types'
 
 const VERSION = '0.1.0'
 
 // Data paths
-const DATA_DIR = join(homedir(), '.config', 'lazyskill')
+const DATA_DIR = join(homedir(), '.config', 'ki')
 const INSTALLED_FILE = join(DATA_DIR, 'installed.json')
 
 interface InstalledRecord {
@@ -74,18 +75,18 @@ Usage:
   skill <command> [options]
 
 Commands:
+  init                  Initialize config file with defaults
   list, ls              List all available skills
-  install <id>          Install a skill
-  uninstall <id>        Uninstall a skill
-  enable <id>           Enable a skill
-  disable <id>          Disable a skill
-  update [id]           Update skill(s)
+  install [search]      Install skill(s) - interactive multi-select
+  uninstall [search]    Uninstall skill(s) - interactive multi-select
+  update                Update all installed skills
   source <cmd>          Manage sources
   target <cmd>          Manage targets
 
 Source Commands:
-  skill source list     List all sources
-  skill source sync     Sync all sources
+  skill source list           List all sources
+  skill source sync [name]    Sync all sources or a specific source
+  skill source skills [name]  List skills in a specific source
 
 Target Commands:
   skill target list     List all targets
@@ -96,20 +97,49 @@ Options:
   --global              Install to global scope (default)
   --project             Install to project scope
   -t, --target <list>   Comma-separated target list
-  --all                 Update all skills
   --version, -v         Show version
   --help, -h            Show this help
 
 Examples:
-  skill list
-  skill list --installed
-  skill install superpowers:brainstorming
-  skill install superpowers:brainstorming -t claude-code,cursor
-  skill install superpowers:brainstorming --project
-  skill uninstall superpowers:brainstorming
-  skill update --all
-  skill source sync
+  skill init                        Initialize config file
+  skill list                        List all skills
+  skill list --installed            List installed skills
+  skill install                     Interactive multi-select
+  skill install brainstorming       Search + multi-select
+  skill install superpowers:brainstorming  Direct install by ID
+  skill install -t claude-code,cursor      With specific targets
+  skill uninstall                   Interactive multi-select
+  skill update                      Update all installed skills
+  skill source sync                 Sync all sources
 `)
+}
+
+// ============ Init Command ============
+
+async function initConfig() {
+  p.intro('Initialize Config')
+
+  const configPath = join(homedir(), '.config', 'ki', 'config.yaml')
+
+  if (existsSync(configPath)) {
+    const overwrite = await p.confirm({
+      message: 'Config file already exists. Overwrite?',
+      initialValue: false
+    })
+
+    if (!overwrite || p.isCancel(overwrite)) {
+      p.outro('Cancelled')
+      return
+    }
+  }
+
+  const spinner = p.spinner()
+  spinner.start('Creating config file...')
+
+  await saveConfig(DEFAULT_CONFIG)
+
+  spinner.stop('Done')
+  p.outro(`Config file created at ${configPath}`)
 }
 
 // ============ List Command ============
@@ -162,9 +192,6 @@ async function listSkills(config: any, flags: Record<string, any>) {
       ? ` (${record.targets.join(', ')})`
       : ''
     console.log(`  ${icon} ${skill.id}${targets}`)
-    if (skill.description) {
-      console.log(`     ${skill.description.slice(0, 60)}${skill.description.length > 60 ? '...' : ''}`)
-    }
   }
   console.log('')
   p.outro(`${filtered.length} skill(s)`)
@@ -173,9 +200,9 @@ async function listSkills(config: any, flags: Record<string, any>) {
 // ============ Install Command ============
 
 async function installSkill(config: any, flags: Record<string, any>) {
-  let skillId = flags._[0]
+  const searchQuery = flags._[0]
 
-  p.intro(skillId ? `Install ${skillId}` : 'Install Skill')
+  p.intro(searchQuery ? `Install Skill: ${searchQuery}` : 'Install Skill')
 
   // Load skills
   const enabledSources = config.sources.filter((s: any) => s.enabled)
@@ -187,35 +214,44 @@ async function installSkill(config: any, flags: Record<string, any>) {
     return
   }
 
-  // Interactive selection if no skillId
-  if (!skillId) {
-    const selected = await p.select({
-      message: 'Select a skill to install',
-      options: skills.map(s => ({
-        value: s.id,
-        label: s.name,
-        hint: s._source
-      }))
-    })
-
-    if (p.isCancel(selected)) {
-      p.outro('Cancelled')
-      return
+  // Filter by search query
+  let filteredSkills = skills
+  if (searchQuery) {
+    // Check if it's an exact skill ID
+    const exactMatch = skills.find(s => s.id === searchQuery)
+    if (exactMatch) {
+      filteredSkills = [exactMatch]
+    } else {
+      // Filter by search term
+      const query = searchQuery.toLowerCase()
+      filteredSkills = skills.filter(s =>
+        s.id.toLowerCase().includes(query) ||
+        s.name.toLowerCase().includes(query)
+      )
+      if (filteredSkills.length === 0) {
+        p.log.error(`No skills matching: ${searchQuery}`)
+        p.outro('Failed')
+        return
+      }
     }
-    skillId = selected as string
   }
 
-  // Find skill
-  const skill = skills.find(s => s.id === skillId)
-  if (!skill) {
-    p.log.error(`Skill not found: ${skillId}`)
-    p.outro('Failed')
+  // Interactive multi-select with search
+  const selectedSkills = await p.autocompleteMultiselect({
+    message: 'Select skills to install (type to search)',
+    options: filteredSkills.map(s => ({
+      value: s.id,
+      label: s.id,
+    })),
+    required: true
+  })
+
+  if (p.isCancel(selectedSkills)) {
+    p.outro('Cancelled')
     return
   }
 
-  // Get skill content
-  const sourceConfig = config.sources.find((s: any) => s.name === skill._source)
-  const content = await providerRegistry.fetchContent(skill, sourceConfig)
+  const skillIds = selectedSkills as string[]
 
   // Determine targets
   let targets: string[]
@@ -223,8 +259,8 @@ async function installSkill(config: any, flags: Record<string, any>) {
     targets = (flags['t'] || flags['target']).split(',').map((t: string) => t.trim())
   } else {
     const enabledTargets = config.targets.filter((t: any) => t.enabled)
-    const selected = await p.multiselect({
-      message: 'Select targets',
+    const selected = await p.autocompleteMultiselect({
+      message: 'Select targets (type to search)',
       options: enabledTargets.map((t: any) => ({
         value: t.name,
         label: t.name
@@ -242,59 +278,63 @@ async function installSkill(config: any, flags: Record<string, any>) {
   // Determine scope
   const scope: 'global' | 'project' = flags['project'] ? 'project' : 'global'
 
-  // Install
+  // Install all selected skills
   const spinner = p.spinner()
   spinner.start('Installing...')
 
   const installed = await loadInstalled()
 
-  for (const targetName of targets) {
-    const target = targetRegistry.get(targetName)
-    if (!target) {
-      spinner.stop()
-      p.log.warn(`Target not found: ${targetName}`)
-      continue
+  for (const skillId of skillIds) {
+    const skill = skills.find(s => s.id === skillId)
+    if (!skill) continue
+
+    spinner.message(`Installing ${skillId}...`)
+
+    const sourceConfig = config.sources.find((s: any) => s.name === skill._source)
+    const content = await providerRegistry.fetchContent(skill, sourceConfig)
+
+    for (const targetName of targets) {
+      const target = targetRegistry.get(targetName)
+      if (!target) continue
+
+      try {
+        await target.install(content, { scope, projectPath: process.cwd() })
+      } catch (error: any) {
+        p.log.warn(`Failed to install ${skillId} to ${targetName}: ${error.message}`)
+      }
     }
 
-    try {
-      await target.install(content, { scope, projectPath: process.cwd() })
-      spinner.message(`Installed to ${targetName}`)
-    } catch (error: any) {
-      spinner.stop()
-      p.log.error(`Failed to install to ${targetName}: ${error.message}`)
+    // Update installed record
+    const existingIndex = installed.findIndex(r => r.id === skillId)
+    const record: InstalledRecord = {
+      id: skillId,
+      source: skill._source,
+      targets,
+      scope,
+      checksum: content.checksum,
+      installedAt: new Date().toISOString(),
+      enabled: true
     }
-  }
 
-  // Update installed record
-  const existingIndex = installed.findIndex(r => r.id === skillId)
-  const record: InstalledRecord = {
-    id: skillId,
-    source: skill._source,
-    targets,
-    scope,
-    checksum: content.checksum,
-    installedAt: new Date().toISOString(),
-    enabled: true
-  }
-
-  if (existingIndex >= 0) {
-    installed[existingIndex] = record
-  } else {
-    installed.push(record)
+    if (existingIndex >= 0) {
+      installed[existingIndex] = record
+    } else {
+      installed.push(record)
+    }
   }
 
   await saveInstalled(installed)
 
   spinner.stop('Done')
-  p.outro(`Installed ${skillId} to ${targets.length} target(s)`)
+  p.outro(`Installed ${skillIds.length} skill(s) to ${targets.length} target(s)`)
 }
 
 // ============ Uninstall Command ============
 
 async function uninstallSkill(flags: Record<string, any>) {
-  let skillId = flags._[0]
+  const searchQuery = flags._[0]
 
-  p.intro(skillId ? `Uninstall ${skillId}` : 'Uninstall Skill')
+  p.intro(searchQuery ? `Uninstall: ${searchQuery}` : 'Uninstall Skill')
 
   const installed = await loadInstalled()
 
@@ -304,159 +344,101 @@ async function uninstallSkill(flags: Record<string, any>) {
     return
   }
 
-  // Interactive selection if no skillId
-  if (!skillId) {
-    const selected = await p.select({
-      message: 'Select a skill to uninstall',
-      options: installed.map(r => ({
-        value: r.id,
-        label: r.id,
-        hint: r.targets.join(', ')
-      }))
-    })
-
-    if (p.isCancel(selected)) {
-      p.outro('Cancelled')
+  // Filter by search query
+  let filtered = installed
+  if (searchQuery) {
+    const query = searchQuery.toLowerCase()
+    filtered = installed.filter(r => r.id.toLowerCase().includes(query))
+    if (filtered.length === 0) {
+      p.log.error(`No installed skills matching: ${searchQuery}`)
+      p.outro('Failed')
       return
     }
-    skillId = selected as string
   }
 
-  const record = installed.find(r => r.id === skillId)
-  if (!record) {
-    p.log.error(`Skill not installed: ${skillId}`)
-    p.outro('Failed')
+  // Interactive multi-select with search
+  const selected = await p.autocompleteMultiselect({
+    message: 'Select skills to uninstall (type to search)',
+    options: filtered.map(r => ({
+      value: r.id,
+      label: r.id,
+    })),
+    required: true
+  })
+
+  if (p.isCancel(selected)) {
+    p.outro('Cancelled')
     return
   }
+
+  const skillIds = selected as string[]
 
   const spinner = p.spinner()
   spinner.start('Uninstalling...')
 
-  for (const targetName of record.targets) {
-    const target = targetRegistry.get(targetName)
-    if (!target) continue
+  for (const skillId of skillIds) {
+    const record = installed.find(r => r.id === skillId)
+    if (!record) continue
 
-    try {
-      await target.uninstall(skillId, { scope: record.scope })
-      spinner.message(`Removed from ${targetName}`)
-    } catch {
-      p.log.warn(`Failed to remove from ${targetName}`)
+    spinner.message(`Uninstalling ${skillId}...`)
+
+    for (const targetName of record.targets) {
+      const target = targetRegistry.get(targetName)
+      if (!target) continue
+
+      try {
+        await target.uninstall(skillId, { scope: record.scope })
+      } catch {
+        p.log.warn(`Failed to remove from ${targetName}`)
+      }
     }
   }
 
   // Remove from installed records
-  const newInstalled = installed.filter(r => r.id !== skillId)
+  const newInstalled = installed.filter(r => !skillIds.includes(r.id))
   await saveInstalled(newInstalled)
 
   spinner.stop('Done')
-  p.outro(`Uninstalled ${skillId}`)
+  p.outro(`Uninstalled ${skillIds.length} skill(s)`)
 }
 
 // ============ Enable/Disable Commands ============
 
-async function enableSkill(skillId: string) {
-  const installed = await loadInstalled()
-  const record = installed.find(r => r.id === skillId)
-
-  if (!record) {
-    console.error(`Skill not installed: ${skillId}`)
-    return
-  }
-
-  record.enabled = true
-  await saveInstalled(installed)
-  console.log(`✅ Enabled ${skillId}`)
-}
-
-async function disableSkill(skillId: string) {
-  const installed = await loadInstalled()
-  const record = installed.find(r => r.id === skillId)
-
-  if (!record) {
-    console.error(`Skill not installed: ${skillId}`)
-    return
-  }
-
-  record.enabled = false
-  await saveInstalled(installed)
-  console.log(`⏸️ Disabled ${skillId}`)
-}
-
 // ============ Update Command ============
 
-async function updateSkill(config: any, flags: Record<string, any>) {
-  const skillId = flags._[0]
-
+async function updateSkills(config: any) {
   p.intro('Update Skills')
 
   const installed = await loadInstalled()
+
+  if (installed.length === 0) {
+    p.note('No skills installed')
+    p.outro('Done')
+    return
+  }
+
+  const spinner = p.spinner()
+  spinner.start('Checking for updates...')
+
+  // Sync sources first
   const enabledSources = config.sources.filter((s: any) => s.enabled)
+  for (const source of enabledSources) {
+    await providerRegistry.sync(source)
+  }
 
-  if (flags['all'] || !skillId) {
-    // Update all
-    const spinner = p.spinner()
-    spinner.start('Checking for updates...')
+  const skills = await providerRegistry.discoverAll(enabledSources)
+  let updated = 0
 
-    const skills = await providerRegistry.discoverAll(enabledSources)
-    let updated = 0
-
-    for (const record of installed) {
-      const skill = skills.find(s => s.id === record.id)
-      if (!skill) continue
-
-      const sourceConfig = config.sources.find((s: any) => s.name === skill._source)
-      const content = await providerRegistry.fetchContent(skill, sourceConfig)
-
-      if (content.checksum !== record.checksum) {
-        spinner.message(`Updating ${record.id}...`)
-
-        for (const targetName of record.targets) {
-          const target = targetRegistry.get(targetName)
-          if (!target) continue
-          await target.install(content, { scope: record.scope })
-        }
-
-        record.checksum = content.checksum
-        record.installedAt = new Date().toISOString()
-        updated++
-      }
-    }
-
-    await saveInstalled(installed)
-
-    if (updated === 0) {
-      spinner.stop('All skills are up to date')
-    } else {
-      spinner.stop(`Updated ${updated} skill(s)`)
-    }
-  } else {
-    // Update specific skill
-    const record = installed.find(r => r.id === skillId)
-    if (!record) {
-      p.log.error(`Skill not installed: ${skillId}`)
-      p.outro('Failed')
-      return
-    }
-
-    const spinner = p.spinner()
-    spinner.start(`Updating ${skillId}...`)
-
-    const skills = await providerRegistry.discoverAll(enabledSources)
-    const skill = skills.find(s => s.id === skillId)
-
-    if (!skill) {
-      spinner.stop()
-      p.log.error(`Skill not found: ${skillId}`)
-      p.outro('Failed')
-      return
-    }
+  for (const record of installed) {
+    const skill = skills.find(s => s.id === record.id)
+    if (!skill) continue
 
     const sourceConfig = config.sources.find((s: any) => s.name === skill._source)
     const content = await providerRegistry.fetchContent(skill, sourceConfig)
 
-    if (content.checksum === record.checksum) {
-      spinner.stop('Already up to date')
-    } else {
+    if (content.checksum !== record.checksum) {
+      spinner.message(`Updating ${record.id}...`)
+
       for (const targetName of record.targets) {
         const target = targetRegistry.get(targetName)
         if (!target) continue
@@ -465,10 +447,16 @@ async function updateSkill(config: any, flags: Record<string, any>) {
 
       record.checksum = content.checksum
       record.installedAt = new Date().toISOString()
-      await saveInstalled(installed)
-
-      spinner.stop('Updated')
+      updated++
     }
+  }
+
+  await saveInstalled(installed)
+
+  if (updated === 0) {
+    spinner.stop('All skills are up to date')
+  } else {
+    spinner.stop(`Updated ${updated} skill(s)`)
   }
 
   p.outro('Done')
@@ -490,45 +478,111 @@ async function sourceList(config: any) {
   p.outro(`${config.sources.length} source(s)`)
 }
 
-async function sourceSync(config: any) {
+async function sourceSync(config: any, sourceName?: string) {
   p.intro('Sync Sources')
 
   const spinner = p.spinner()
   spinner.start('Syncing...')
 
-  const enabledSources = config.sources.filter((s: any) => s.enabled)
-  const skills = await providerRegistry.discoverAll(enabledSources)
+  let sourcesToSync = config.sources.filter((s: any) => s.enabled)
+  if (sourceName) {
+    sourcesToSync = sourcesToSync.filter((s: any) => s.name === sourceName)
+    if (sourcesToSync.length === 0) {
+      spinner.stop()
+      p.log.error(`Source not found or disabled: ${sourceName}`)
+      p.outro('Failed')
+      return
+    }
+  }
 
-  spinner.stop(`Synced ${enabledSources.length} source(s), found ${skills.length} skills`)
+  // Sync each source (git fetch + reset)
+  for (const source of sourcesToSync) {
+    spinner.message(`Syncing ${source.name}...`)
+    await providerRegistry.sync(source)
+  }
+
+  // Then discover skills
+  const skills = await providerRegistry.discoverAll(sourcesToSync)
+
+  spinner.stop(`Synced ${sourcesToSync.length} source(s), found ${skills.length} skills`)
   p.outro('Done')
+}
+
+async function sourceSkills(config: any, sourceName?: string) {
+  p.intro(sourceName ? `Skills in ${sourceName}` : 'Skills by Source')
+
+  const spinner = p.spinner()
+  spinner.start('Loading skills...')
+
+  let sourcesToQuery = config.sources.filter((s: any) => s.enabled)
+  if (sourceName) {
+    sourcesToQuery = sourcesToQuery.filter((s: any) => s.name === sourceName)
+    if (sourcesToQuery.length === 0) {
+      spinner.stop()
+      p.log.error(`Source not found or disabled: ${sourceName}`)
+      p.outro('Failed')
+      return
+    }
+  }
+
+  const skills = await providerRegistry.discoverAll(sourcesToQuery)
+
+  spinner.stop()
+
+  // Group by source
+  const bySource: Record<string, any[]> = {}
+  for (const skill of skills) {
+    if (!bySource[skill._source]) {
+      bySource[skill._source] = []
+    }
+    bySource[skill._source].push(skill)
+  }
+
+  const installed = await loadInstalled()
+
+  for (const [source, sourceSkills] of Object.entries(bySource)) {
+    if (sourceName && source !== sourceName) continue
+
+    console.log(`\n  ${source} (${sourceSkills.length})`)
+    for (const skill of sourceSkills) {
+      const record = installed.find(r => r.id === skill.id)
+      const icon = record
+        ? (record.enabled ? '✅' : '⏸️')
+        : '⬜'
+      console.log(`    ${icon} ${skill.id}`)
+    }
+  }
+
+  console.log('')
+  p.outro(`${skills.length} skill(s)`)
 }
 
 async function sourceEnable(config: any, sourceName: string) {
   const source = config.sources.find((s: any) => s.name === sourceName)
   if (!source) {
-    console.error(`Source not found: ${sourceName}`)
+    p.log.error(`Source not found: ${sourceName}`)
     return
   }
 
   source.enabled = true
   await saveConfig(config)
-  console.log(`✅ Enabled source: ${sourceName}`)
+  p.log.success(`Enabled source: ${sourceName}`)
 }
 
 async function sourceDisable(config: any, sourceName: string) {
   const source = config.sources.find((s: any) => s.name === sourceName)
   if (!source) {
-    console.error(`Source not found: ${sourceName}`)
+    p.log.error(`Source not found: ${sourceName}`)
     return
   }
 
   source.enabled = false
   await saveConfig(config)
-  console.log(`◯ Disabled source: ${sourceName}`)
+  p.log.warn(`Disabled source: ${sourceName}`)
 }
 
 async function saveConfig(config: any) {
-  const configPath = join(homedir(), '.config', 'lazyskill', 'config.yaml')
+  const configPath = join(homedir(), '.config', 'ki', 'config.yaml')
   await mkdir(dirname(configPath), { recursive: true })
   await writeFile(configPath, YAML.stringify(config, null, 2))
 }
@@ -581,6 +635,10 @@ async function main() {
 
   // Route commands
   switch (command) {
+    case 'init':
+      await initConfig()
+      break
+
     case 'list':
     case 'ls':
       await listSkills(config, flags)
@@ -595,24 +653,8 @@ async function main() {
       await uninstallSkill(flags)
       break
 
-    case 'enable':
-      if (!flags._[0]) {
-        console.error('Please specify a skill ID')
-        process.exit(1)
-      }
-      await enableSkill(flags._[0])
-      break
-
-    case 'disable':
-      if (!flags._[0]) {
-        console.error('Please specify a skill ID')
-        process.exit(1)
-      }
-      await disableSkill(flags._[0])
-      break
-
     case 'update':
-      await updateSkill(config, flags)
+      await updateSkills(config)
       break
 
     case 'source':
@@ -620,7 +662,9 @@ async function main() {
       if (sourceCmd === 'list' || sourceCmd === 'ls') {
         await sourceList(config)
       } else if (sourceCmd === 'sync') {
-        await sourceSync(config)
+        await sourceSync(config, flags._[1])
+      } else if (sourceCmd === 'skills') {
+        await sourceSkills(config, flags._[1])
       } else if (sourceCmd === 'enable') {
         const sourceName = flags._[1]
         if (!sourceName) {
@@ -638,10 +682,11 @@ async function main() {
       } else {
         console.log(`
 Source commands:
-  skill source list           List all sources
-  skill source sync           Sync all sources
-  skill source enable <name>  Enable a source
-  skill source disable <name>  Disable a source
+  skill source list             List all sources
+  skill source sync [name]      Sync all sources or a specific source
+  skill source skills [name]    List skills in a specific source
+  skill source enable <name>    Enable a source
+  skill source disable <name>   Disable a source
 `)
       }
       break

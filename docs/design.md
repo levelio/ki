@@ -67,8 +67,36 @@ Provider = 发现脚本，负责从特定源提取 skill 列表
 
 | Provider | 说明 |
 |----------|------|
-| **git** | 处理 Git 仓库（GitHub、GitLab、自建等），GitHub 优先使用 API |
+| **git** | 通用 Git 仓库 Provider，支持任意 git 仓库作为 skill 源 |
 | **local** | 处理本地目录 |
+
+### Git Provider 配置选项
+
+```yaml
+sources:
+  - name: superpowers
+    provider: git
+    url: https://github.com/obra/superpowers.git
+    options:
+      skillsPath: skills       # skill 目录路径（默认：skills），支持数组
+      structure: nested        # nested（每个 skill 一个目录）或 flat（扁平结构）
+      skillFile: SKILL.md      # skill 文件名（默认：SKILL.md）
+      branch: main             # Git 分支（默认：main）
+    enabled: true
+
+  # 多目录示例：OpenAI skills 仓库
+  - name: openai-skills
+    provider: git
+    url: https://github.com/openai/skills.git
+    options:
+      skillsPath:              # 支持数组，从多个目录加载技能
+        - skills/.curated      # 精选技能
+        - skills/.system       # 系统技能
+      structure: nested
+      skillFile: SKILL.md
+      branch: main
+    enabled: true
+```
 
 ### 自定义 Provider
 
@@ -76,7 +104,6 @@ Provider = 发现脚本，负责从特定源提取 skill 列表
 
 ```
 ~/.config/lazyskill/providers/
-├── superpowers.ts    # 预装
 ├── my-company.ts     # 用户自定义
 └── ...
 ```

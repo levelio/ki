@@ -16,8 +16,25 @@ export const DEFAULT_CONFIG: Config = {
   sources: [
     {
       name: 'superpowers',
-      provider: 'superpowers',
+      provider: 'git',
       url: 'https://github.com/obra/superpowers.git',
+      options: {
+        skillsPath: 'skills',
+        structure: 'nested',
+        skillFile: 'SKILL.md',
+        branch: 'main',
+      },
+      enabled: true,
+    },
+    {
+      name: 'ki',
+      provider: 'local',
+      url: '/Users/zhiqiang/Projects/opensource/lazyskill',
+      options: {
+        skillsPath: 'skills',
+        structure: 'nested',
+        skillFile: 'SKILL.md',
+      },
       enabled: true,
     },
   ],

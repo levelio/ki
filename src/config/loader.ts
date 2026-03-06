@@ -8,7 +8,7 @@ import type { Config, TargetConfig } from '@/types'
 import { DEFAULT_CONFIG } from '@/types'
 import type { SourceConfig } from '@/types'
 
-const CONFIG_DIR = join(homedir(), '.config', 'lazyskill')
+const CONFIG_DIR = join(homedir(), '.config', 'ki')
 const CONFIG_FILE = join(CONFIG_DIR, 'config.yaml')
 
 export async function loadConfig(): Promise<Config> {
@@ -26,6 +26,9 @@ export async function loadConfig(): Promise<Config> {
     } catch (error) {
       console.error('Failed to load config:', error)
     }
+  } else {
+    // Create default config file if not exists
+    await saveConfig(config)
   }
 
   return config

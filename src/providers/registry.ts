@@ -2,7 +2,6 @@
 import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
 import { LocalProvider } from './local'
 import { GitProvider } from './git'
-import { SuperpowersProvider } from './superpowers'
 
 class ProviderRegistry {
   private providers: Map<string, Provider> = new Map()
@@ -11,7 +10,6 @@ class ProviderRegistry {
     // Register built-in providers
     this.register(new LocalProvider())
     this.register(new GitProvider())
-    this.register(new SuperpowersProvider())
   }
 
   register(provider: Provider): void {
@@ -47,6 +45,13 @@ class ProviderRegistry {
     }
 
     return allSkills
+  }
+
+  async sync(config: SourceConfig): Promise<void> {
+    const provider = this.get(config.provider)
+    if (!provider || !provider.sync) return
+
+    await provider.sync(config)
   }
 
   async fetchContent(skill: SkillMeta, config: SourceConfig): Promise<SkillContent> {
