@@ -66,6 +66,7 @@ export class SuperpowersProvider implements Provider {
       id: skill.id,
       content,
       checksum,
+      sourcePath: skill._path,  // Path to original skill file for symlink
     }
   }
 

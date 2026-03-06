@@ -257,7 +257,7 @@ async function installSkill(config: any, flags: Record<string, any>) {
     }
 
     try {
-      await target.install(content, { scope })
+      await target.install(content, { scope, projectPath: process.cwd() })
       spinner.message(`Installed to ${targetName}`)
     } catch (error: any) {
       spinner.stop()

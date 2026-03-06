@@ -1,9 +1,11 @@
 // src/targets/cursor.ts
 import { join } from 'path'
 import { homedir } from 'os'
-import { existsSync } from 'fs'
-import { writeFile, unlink, mkdir, readdir, rename, rm } from 'fs/promises'
+import { existsSync, lstatSync, statSync } from 'fs'
+import { mkdir, readdir, symlink, unlink, writeFile, rm, rename } from 'fs/promises'
 import type { Target, InstallOptions, SkillContent, InstalledSkill } from '@/types'
+
+import { isWindows } from '@/utils/platform'
 
 export class CursorTarget implements Target {
   name = 'cursor'
@@ -27,9 +29,9 @@ export class CursorTarget implements Target {
 
     await mkdir(skillDir, { recursive: true })
 
-    // Write SKILL.md with frontmatter
-    const skillContent = this.toSkillFormat(skill)
-    await writeFile(join(skillDir, 'SKILL.md'), skillContent, 'utf-8')
+    // Write SKILL.md - use symlink if sourcePath is available
+    const skillFile = join(skillDir, 'SKILL.md')
+    await this.writeFileOrSymlink(skillFile, skill.content, skill.sourcePath)
   }
 
   async uninstall(skillId: string, options?: InstallOptions): Promise<void> {
@@ -64,7 +66,9 @@ export class CursorTarget implements Target {
       const skillFile = join(basePath, entry.name, 'SKILL.md')
       if (!existsSync(skillFile)) continue
 
-      const skillId = entry.name
+      const skillId = entry.name.replace(/\.disabled$/, '')
+      const isDisabled = entry.name.endsWith('.disabled')
+
       skills.push({
         id: skillId,
         source: 'unknown',
@@ -72,7 +76,7 @@ export class CursorTarget implements Target {
         scope,
         checksum: '',
         installedAt: new Date().toISOString(),
-        enabled: true,
+        enabled: !isDisabled,
       })
     }
 
@@ -130,5 +134,54 @@ description: Installed from ${skill.id}
 ---
 
 ${skill.content}`
+  }
+
+  /**
+   * Write file or create symlink based on platform and source availability
+   */
+  protected async writeFileOrSymlink(
+    targetPath: string,
+    content: string,
+    sourcePath?: string
+  ): Promise<void> {
+    // If source path exists and is a file, try to create symlink
+    if (sourcePath && existsSync(sourcePath)) {
+      try {
+        // Try to create symlink
+        await this.createSymlink(sourcePath, targetPath)
+        return
+      } catch (error) {
+        // Symlink failed (e.g., Windows without admin), fall back to copy
+        console.warn(`Symlink failed, falling back to copy: ${error}`)
+      }
+    }
+
+    // Fall back to writing file content
+    await writeFile(targetPath, content, 'utf-8')
+  }
+
+  /**
+   * Create symlink with cross-platform support
+   */
+  protected async createSymlink(sourcePath: string, targetPath: string): Promise<void> {
+    // Remove existing file/link first
+    if (existsSync(targetPath)) {
+      await unlink(targetPath)
+    }
+
+    // Ensure target directory exists
+    const targetDir = join(targetPath, '..')
+    await mkdir(targetDir, { recursive: true })
+
+    // On Windows, use junction for directory symlinks (doesn't require admin)
+    // For files, use regular symlink (requires admin on Windows)
+    if (isWindows()) {
+      // On Windows, for file symlinks use junction type
+      // This allows creating symlinks without admin privileges
+      await symlink(sourcePath, targetPath, 'junction')
+    } else {
+      // On Unix/macOS, use regular symlink
+      await symlink(sourcePath, targetPath)
+    }
   }
 }
