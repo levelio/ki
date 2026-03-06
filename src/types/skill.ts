@@ -24,7 +24,8 @@ export interface SkillContent {
   id: string
   content: string
   checksum: string
-  sourcePath?: string  // Path to the original skill file (for symlink)
+  sourcePath?: string  // Path to original SKILL.md file (for file symlink)
+  sourceDir?: string  // Path to original skill directory (for directory symlink)
 }
 
 export interface InstalledSkill {

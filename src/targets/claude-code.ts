@@ -1,8 +1,8 @@
 // src/targets/claude-code.ts
 import { join, basename } from 'path'
 import { homedir } from 'os'
-import { existsSync, lstatSync, statSync } from 'fs'
-import { mkdir, readdir, rm, symlink, unlink, writeFile } from 'fs/promises'
+import { existsSync, lstatSync } from 'fs'
+import { mkdir, readdir, symlink, unlink, writeFile, rm, rename } from 'fs/promises'
 import type { Target, InstallOptions, SkillContent, InstalledSkill } from '@/types'
 
 import { isWindows } from '@/utils/platform'
@@ -23,16 +23,18 @@ export class ClaudeCodeTarget implements Target {
       ? this.getProjectPath(options.projectPath)
       : this.getGlobalPath()
 
-    // Each skill is a directory with SKILL.md inside
     const skillName = this.getSkillName(skill.id)
-    const skillDir = join(basePath, skillName)
+    const targetDir = join(basePath, skillName)
 
-    await mkdir(skillDir, { recursive: true })
-
-    // Write SKILL.md with frontmatter
-    const skillContent = this.toSkillFormat(skill)
-    const skillFile = join(skillDir, 'SKILL.md')
-    await this.writeFileOrSymlink(skillFile, skillContent, skill.sourcePath)
+    // If source directory exists, create symlink to the whole directory
+    if (skill.sourceDir && existsSync(skill.sourceDir)) {
+      await this.createDirSymlink(skill.sourceDir, targetDir)
+    } else {
+      // Fallback: create directory with SKILL.md
+      await mkdir(targetDir, { recursive: true })
+      const skillContent = this.toSkillFormat(skill)
+      await writeFile(join(targetDir, 'SKILL.md'), skillContent, 'utf-8')
+    }
   }
 
   async uninstall(skillId: string, options?: InstallOptions): Promise<void> {
@@ -44,7 +46,13 @@ export class ClaudeCodeTarget implements Target {
     const skillDir = join(basePath, skillName)
 
     if (existsSync(skillDir)) {
-      await rm(skillDir, { recursive: true, force: true })
+      // Check if it's a symlink
+      const stats = lstatSync(skillDir)
+      if (stats.isSymbolicLink()) {
+        await unlink(skillDir)
+      } else {
+        await rm(skillDir, { recursive: true, force: true })
+      }
     }
   }
 
@@ -61,15 +69,15 @@ export class ClaudeCodeTarget implements Target {
     const entries = await readdir(basePath, { withFileTypes: true })
 
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
       if (entry.name.endsWith('.disabled')) continue
 
-      const skillFile = join(basePath, entry.name, 'SKILL.md')
+      const skillPath = join(basePath, entry.name)
+      const skillFile = join(skillPath, 'SKILL.md')
       if (!existsSync(skillFile)) continue
 
-      const skillId = entry.name
       skills.push({
-        id: skillId,
+        id: entry.name,
         source: 'unknown',
         target: this.name,
         scope,
@@ -88,12 +96,11 @@ export class ClaudeCodeTarget implements Target {
       : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
-    const disabledDir = join(basePath, `${skillName}.disabled`)
-    const enabledDir = join(basePath, skillName)
+    const disabledPath = join(basePath, `${skillName}.disabled`)
+    const enabledPath = join(basePath, skillName)
 
-    if (existsSync(disabledDir)) {
-      const { rename } = await import('fs/promises')
-      await rename(disabledDir, enabledDir)
+    if (existsSync(disabledPath)) {
+      await rename(disabledPath, enabledPath)
     }
   }
 
@@ -103,17 +110,15 @@ export class ClaudeCodeTarget implements Target {
       : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
-    const enabledDir = join(basePath, skillName)
-    const disabledDir = join(basePath, `${skillName}.disabled`)
+    const enabledPath = join(basePath, skillName)
+    const disabledPath = join(basePath, `${skillName}.disabled`)
 
-    if (existsSync(enabledDir)) {
-      const { rename } = await import('fs/promises')
-      await rename(enabledDir, disabledDir)
+    if (existsSync(enabledPath)) {
+      await rename(enabledPath, disabledPath)
     }
   }
 
   protected getSkillName(skillId: string): string {
-    // Extract skill name from id (last part after colon)
     const parts = skillId.split(':')
     return parts[parts.length - 1]
   }
@@ -121,13 +126,10 @@ export class ClaudeCodeTarget implements Target {
   protected toSkillFormat(skill: SkillContent): string {
     const skillName = this.getSkillName(skill.id)
 
-    // Check if content already has frontmatter
     if (skill.content.trimStart().startsWith('---')) {
-      // Already has frontmatter, use as-is
       return skill.content
     }
 
-    // Add frontmatter for Claude Code skills
     return `---
 name: ${skillName}
 description: Installed from ${skill.id}
@@ -137,51 +139,29 @@ ${skill.content}`
   }
 
   /**
-   * Write file or create symlink based on platform and source availability
+   * Create symlink to a directory with cross-platform support
    */
-  protected async writeFileOrSymlink(
-    targetPath: string,
-    content: string,
-    sourcePath?: string
-  ): Promise<void> {
-    // If source path exists and is a file, try to create symlink
-    if (sourcePath && existsSync(sourcePath)) {
-      try {
-        // Try to create symlink
-        await this.createSymlink(sourcePath, targetPath)
-        return
-      } catch (error) {
-        // Symlink failed (e.g., Windows without admin), fall back to copy
-        console.warn(`Symlink failed, falling back to copy: ${error}`)
+  protected async createDirSymlink(sourceDir: string, targetDir: string): Promise<void> {
+    // Remove existing directory/link first
+    if (existsSync(targetDir)) {
+      const stats = lstatSync(targetDir)
+      if (stats.isSymbolicLink()) {
+        await unlink(targetDir)
+      } else {
+        await rm(targetDir, { recursive: true, force: true })
       }
     }
 
-    // Fall back to writing file content
-    await writeFile(targetPath, content, 'utf-8')
-  }
+    // Ensure parent directory exists
+    await mkdir(join(targetDir, '..'), { recursive: true })
 
-  /**
-   * Create symlink with cross-platform support
-   */
-  protected async createSymlink(sourcePath: string, targetPath: string): Promise<void> {
-    // Remove existing file/link first
-    if (existsSync(targetPath)) {
-      await unlink(targetPath)
-    }
-
-    // Ensure target directory exists
-    const targetDir = join(targetPath, '..')
-    await mkdir(targetDir, { recursive: true })
-
-    // On Windows, use junction for directory symlinks (doesn't require admin)
-    // For files, use regular symlink (requires admin on Windows)
+    // Create symlink to the directory
     if (isWindows()) {
-      // On Windows, for file symlinks we junction type
-      // This allows creating symlinks without admin privileges
-      await symlink(sourcePath, targetPath, 'junction')
+      // On Windows, use junction for directory symlinks (doesn't require admin)
+      await symlink(sourceDir, targetDir, 'junction')
     } else {
       // On Unix/macOS, use regular symlink
-      await symlink(sourcePath, targetPath)
+      await symlink(sourceDir, targetDir)
     }
   }
 }

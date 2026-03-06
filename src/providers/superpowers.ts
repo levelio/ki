@@ -62,11 +62,15 @@ export class SuperpowersProvider implements Provider {
     const content = await readFile(skill._path, 'utf-8')
     const checksum = computeFileChecksum(content)
 
+    // Get the skill directory (parent of SKILL.md)
+    const sourceDir = join(skill._path, '..')
+
     return {
       id: skill.id,
       content,
       checksum,
-      sourcePath: skill._path,  // Path to original skill file for symlink
+      sourcePath: skill._path,  // Path to original SKILL.md file (for file symlink)
+      sourceDir,  // Path to original skill directory (for directory symlink)
     }
   }
 
