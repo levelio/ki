@@ -26,17 +26,6 @@ export const DEFAULT_CONFIG: Config = {
       },
       enabled: true,
     },
-    {
-      name: 'ki',
-      provider: 'local',
-      url: '/Users/zhiqiang/Projects/opensource/lazyskill',
-      options: {
-        skillsPath: 'skills',
-        structure: 'nested',
-        skillFile: 'SKILL.md',
-      },
-      enabled: true,
-    },
   ],
   targets: [
     { name: 'claude-code', enabled: true },
