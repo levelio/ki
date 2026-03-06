@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 import * as p from '@clack/prompts'
+import * as YAML from 'yaml'
 import { loadConfig } from './config'
 import { providerRegistry } from './providers'
 import { targetRegistry } from './targets'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { homedir } from 'os'
 import { computeFileChecksum } from './utils'
 
@@ -502,6 +503,36 @@ async function sourceSync(config: any) {
   p.outro('Done')
 }
 
+async function sourceEnable(config: any, sourceName: string) {
+  const source = config.sources.find((s: any) => s.name === sourceName)
+  if (!source) {
+    console.error(`Source not found: ${sourceName}`)
+    return
+  }
+
+  source.enabled = true
+  await saveConfig(config)
+  console.log(`✅ Enabled source: ${sourceName}`)
+}
+
+async function sourceDisable(config: any, sourceName: string) {
+  const source = config.sources.find((s: any) => s.name === sourceName)
+  if (!source) {
+    console.error(`Source not found: ${sourceName}`)
+    return
+  }
+
+  source.enabled = false
+  await saveConfig(config)
+  console.log(`◯ Disabled source: ${sourceName}`)
+}
+
+async function saveConfig(config: any) {
+  const configPath = join(homedir(), '.config', 'lazyskill', 'config.yaml')
+  await mkdir(dirname(configPath), { recursive: true })
+  await writeFile(configPath, YAML.stringify(config, null, 2))
+}
+
 // ============ Target Commands ============
 
 async function targetList(config: any) {
@@ -586,11 +617,27 @@ async function main() {
         await sourceList(config)
       } else if (sourceCmd === 'sync') {
         await sourceSync(config)
+      } else if (sourceCmd === 'enable') {
+        const sourceName = flags._[1]
+        if (!sourceName) {
+          console.error('Please specify a source name')
+          process.exit(1)
+        }
+        await sourceEnable(config, sourceName)
+      } else if (sourceCmd === 'disable') {
+        const sourceName = flags._[1]
+        if (!sourceName) {
+          console.error('Please specify a source name')
+          process.exit(1)
+        }
+        await sourceDisable(config, sourceName)
       } else {
         console.log(`
 Source commands:
-  skill source list     List all sources
-  skill source sync     Sync all sources
+  skill source list           List all sources
+  skill source sync           Sync all sources
+  skill source enable <name>  Enable a source
+  skill source disable <name>  Disable a source
 `)
       }
       break
