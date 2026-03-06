@@ -544,7 +544,11 @@ async function targetList(config: any) {
 
     console.log(`  ${icon} ${targetConfig.name}`)
     if (target) {
-      console.log(`     Global: ${target.getGlobalPath()}`)
+      try {
+        console.log(`     Global: ${target.getGlobalPath()}`)
+      } catch {
+        console.log(`     Global: (not supported)`)
+      }
       console.log(`     Project: ${target.getProjectPath('.')}`)
     }
     console.log('')
