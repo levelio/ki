@@ -11,7 +11,7 @@ import { homedir } from 'os'
 import { computeFileChecksum } from './utils'
 import { DEFAULT_CONFIG } from './types'
 
-const VERSION = '0.1.1'
+const VERSION = '0.1.2'
 
 // Data paths
 const DATA_DIR = join(homedir(), '.config', 'ki')
