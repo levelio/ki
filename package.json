@@ -1,0 +1,38 @@
+{
+  "name": "ki",
+  "version": "0.1.0",
+  "description": "AI Agent Skill Manager",
+  "type": "module",
+  "bin": {
+    "ki": "./src/cli/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli/index.ts",
+    "build": "bun build src/cli/index.ts --compile --outfile ki",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
+    "release": "echo 'TODO: release script'"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "skill",
+    "cli",
+    "claude-code",
+    "gemini",
+    "cursor"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/bun": "^1.2.0",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "commander": "^13.0.0",
+    "picocolors": "^1.1.0"
+  }
+}
