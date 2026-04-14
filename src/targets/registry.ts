@@ -1,14 +1,16 @@
 // src/targets/registry.ts
 import type { Target, TargetConfig, SkillContent } from '@/types'
 import { ClaudeCodeTarget } from './claude-code'
+import { CodexTarget } from './codex'
 import { CursorTarget } from './cursor'
 
-class TargetRegistry {
+export class TargetRegistry {
   private targets: Map<string, Target> = new Map()
 
   constructor() {
     // Register built-in targets
     this.register(new ClaudeCodeTarget())
+    this.register(new CodexTarget())
     this.register(new CursorTarget())
   }
 
@@ -42,9 +44,12 @@ class TargetRegistry {
     projectPath?: string
   ): Promise<void> {
     const targets = this.getEnabled(enabledConfigs)
+    const installOptions = scope === 'project'
+      ? { scope, projectPath: projectPath! }
+      : { scope }
 
     await Promise.all(targets.map(target =>
-      target.install(skill, { scope, projectPath })
+      target.install(skill, installOptions)
     ))
   }
 
@@ -55,9 +60,12 @@ class TargetRegistry {
     projectPath?: string
   ): Promise<void> {
     const targets = this.getEnabled(enabledConfigs)
+    const installOptions = scope === 'project'
+      ? { scope, projectPath: projectPath! }
+      : { scope }
 
     await Promise.all(targets.map(target =>
-      target.uninstall(skillId, { scope, projectPath })
+      target.uninstall(skillId, installOptions)
     ))
   }
 }

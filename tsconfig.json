@@ -3,16 +3,16 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "types": ["bun", "node"],
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": ".",
+    "rootDir": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]
 }

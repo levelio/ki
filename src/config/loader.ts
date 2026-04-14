@@ -11,6 +11,11 @@ import type { SourceConfig } from '@/types'
 const CONFIG_DIR = join(homedir(), '.config', 'ki')
 const CONFIG_FILE = join(CONFIG_DIR, 'config.yaml')
 
+export interface ConfigOverride {
+  sources?: Partial<SourceConfig>[]
+  targets?: Partial<TargetConfig>[]
+}
+
 export async function loadConfig(): Promise<Config> {
   // Start with default config
   let config = { ...DEFAULT_CONFIG, sources: [...DEFAULT_CONFIG.sources], targets: [...DEFAULT_CONFIG.targets] }
@@ -19,7 +24,7 @@ export async function loadConfig(): Promise<Config> {
   if (existsSync(CONFIG_FILE)) {
     try {
       const content = await readFile(CONFIG_FILE, 'utf-8')
-      const userConfig = parse(content) as Partial<Config>
+      const userConfig = parse(content) as ConfigOverride
 
       // Merge configs
       config = mergeConfig(config, userConfig)
@@ -42,20 +47,31 @@ export async function saveConfig(config: Config): Promise<void> {
   await writeFile(CONFIG_FILE, content, 'utf-8')
 }
 
-function mergeConfig(defaults: Config, user: Partial<Config>): Config {
+export function mergeConfig(defaults: Config, user: ConfigOverride): Config {
   return {
     sources: mergeArrays(defaults.sources, user.sources || [], 'name'),
     targets: mergeArrays(defaults.targets, user.targets || [], 'name'),
   }
 }
 
-function mergeArrays<T extends { name: string }>(
+function hasStringKey<T extends { name: string }>(
+  item: Partial<T>,
+  key: keyof T
+): item is Partial<T> & Pick<T, typeof key> {
+  return typeof item[key] === 'string' && item[key] !== ''
+}
+
+export function mergeArrays<T extends { name: string }>(
   defaults: T[],
   user: Partial<T>[],
   key: keyof T
 ): T[] {
   const result = [...defaults]
-  const userMap = new Map(user.map(item => [item[key], item]))
+  const userMap = new Map(
+    user
+      .filter((item): item is Partial<T> & Pick<T, typeof key> => hasStringKey(item, key))
+      .map(item => [item[key], item])
+  )
 
   for (const [name, userItem] of userMap) {
     const defaultIndex = result.findIndex(item => item[key] === name)

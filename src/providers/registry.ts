@@ -3,7 +3,7 @@ import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
 import { LocalProvider } from './local'
 import { GitProvider } from './git'
 
-class ProviderRegistry {
+export class ProviderRegistry {
   private providers: Map<string, Provider> = new Map()
 
   constructor() {

@@ -1,10 +1,9 @@
 // src/types/target.ts
 import type { SkillContent, InstalledSkill } from './skill'
 
-export interface InstallOptions {
-  scope: 'global' | 'project'
-  projectPath?: string
-}
+export type InstallOptions =
+  | { scope: 'global'; projectPath?: undefined }
+  | { scope: 'project'; projectPath: string }
 
 export interface Target {
   name: string

@@ -12,6 +12,20 @@ export interface Config {
   targets: TargetConfig[]
 }
 
+export interface CliFlags {
+  _?: string[]
+  t?: string | boolean
+  target?: string | boolean
+  y?: boolean
+  yes?: boolean
+  project?: boolean
+  global?: boolean
+  'dry-run'?: boolean
+  installed?: boolean
+  source?: string
+  [key: string]: string | boolean | string[] | undefined
+}
+
 export const DEFAULT_CONFIG: Config = {
   sources: [
     {
@@ -41,6 +55,7 @@ export const DEFAULT_CONFIG: Config = {
   ],
   targets: [
     { name: 'claude-code', enabled: true },
+    { name: 'codex', enabled: true },
     { name: 'cursor', enabled: true },
   ],
 }

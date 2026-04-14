@@ -6,8 +6,6 @@ import { existsSync } from 'fs'
 import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
 import { computeFileChecksum } from '@/utils'
 
-const CACHE_DIR = join(homedir(), '.config', 'ki', 'cache')
-
 /**
  * Universal Git Provider
  *
@@ -44,6 +42,8 @@ const CACHE_DIR = join(homedir(), '.config', 'ki', 'cache')
 export class GitProvider implements Provider {
   name = 'git'
 
+  constructor(private readonly cacheDir = join(homedir(), '.config', 'ki', 'cache')) {}
+
   async discover(config: SourceConfig): Promise<SkillMeta[]> {
     const cachePath = this.getCachePath(config)
     const options = config.options || {}
@@ -67,10 +67,6 @@ export class GitProvider implements Provider {
     }
 
     return allSkills
-  }
-
-  async sync(config: SourceConfig): Promise<void> {
-    await this.ensureCached(config)
   }
 
   /**
@@ -215,7 +211,7 @@ export class GitProvider implements Provider {
 
   private getCachePath(config: SourceConfig): string {
     const cacheName = this.getCacheName(config.url)
-    return join(CACHE_DIR, cacheName)
+    return join(this.cacheDir, cacheName)
   }
 
   private async ensureCached(config: SourceConfig): Promise<void> {
@@ -237,8 +233,8 @@ export class GitProvider implements Provider {
   }
 
   private async clone(url: string, path: string, branch: string): Promise<void> {
-    await mkdir(CACHE_DIR, { recursive: true })
-    await this.runGit(CACHE_DIR, 'clone', '--depth', '1', '-b', branch, url, path)
+    await mkdir(this.cacheDir, { recursive: true })
+    await this.runGit(this.cacheDir, 'clone', '--depth', '1', '-b', branch, url, path)
   }
 
   private async removeDir(path: string): Promise<void> {

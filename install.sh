@@ -181,9 +181,9 @@ main() {
   echo
   echo "  Quick start:"
   echo ""
-  echo -e "    ${GREEN}ki init${NC}        # Initialize config"
-  echo -e "    ${GREEN}ki list${NC}        # List available skills"
-  echo -e "    ${GREEN}ki install${NC}     # Install skills"
+  echo -e "    ${GREEN}ki init${NC}         # Initialize config"
+  echo -e "    ${GREEN}ki source sync${NC}  # Sync built-in sources"
+  echo -e "    ${GREEN}ki list${NC}         # List available skills"
   echo ""
 
   # Verify installation
