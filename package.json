@@ -1,6 +1,6 @@
 {
   "name": "ki-skill",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Cross-tool skill manager for AI coding assistants",
   "author": "Level",
   "license": "MIT",
@@ -8,12 +8,20 @@
     "type": "git",
     "url": "git+https://github.com/levelio/ki.git"
   },
-  "keywords": ["skill", "ai", "claude", "cursor", "cli"],
+  "keywords": [
+    "skill",
+    "ai",
+    "claude",
+    "cursor",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "ki": "./dist/cli.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsup src/cli.ts --format esm --platform node --target node20 --out-dir dist --clean",
