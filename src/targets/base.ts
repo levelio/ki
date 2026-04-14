@@ -1,8 +1,20 @@
 // src/targets/base.ts
-import { existsSync } from 'fs'
-import { readFile, writeFile, unlink, mkdir, readdir, rename } from 'fs/promises'
-import { join } from 'path'
-import type { Target, InstallOptions, SkillContent, InstalledSkill } from '@/types'
+import { existsSync } from 'node:fs'
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
+import { join } from 'node:path'
+import type {
+  InstallOptions,
+  InstalledSkill,
+  SkillContent,
+  Target,
+} from '@/types'
 
 export abstract class BaseTarget implements Target {
   abstract name: string
@@ -36,10 +48,14 @@ export abstract class BaseTarget implements Target {
     }
   }
 
-  async list(scope: 'global' | 'project', projectPath?: string): Promise<InstalledSkill[]> {
-    const basePath = scope === 'project' && projectPath
-      ? this.getProjectPath(projectPath)
-      : this.getGlobalPath()
+  async list(
+    scope: 'global' | 'project',
+    projectPath?: string,
+  ): Promise<InstalledSkill[]> {
+    const basePath =
+      scope === 'project' && projectPath
+        ? this.getProjectPath(projectPath)
+        : this.getGlobalPath()
 
     if (!existsSync(basePath)) {
       return []
@@ -72,7 +88,10 @@ export abstract class BaseTarget implements Target {
 
   async enable(skillId: string, options?: InstallOptions): Promise<void> {
     const basePath = this.getInstallPath(options)
-    const disabledPath = join(basePath, `${this.getSkillFileName(skillId)}.disabled`)
+    const disabledPath = join(
+      basePath,
+      `${this.getSkillFileName(skillId)}.disabled`,
+    )
     const enabledPath = join(basePath, this.getSkillFileName(skillId))
 
     if (existsSync(disabledPath)) {
@@ -83,7 +102,10 @@ export abstract class BaseTarget implements Target {
   async disable(skillId: string, options?: InstallOptions): Promise<void> {
     const basePath = this.getInstallPath(options)
     const enabledPath = join(basePath, this.getSkillFileName(skillId))
-    const disabledPath = join(basePath, `${this.getSkillFileName(skillId)}.disabled`)
+    const disabledPath = join(
+      basePath,
+      `${this.getSkillFileName(skillId)}.disabled`,
+    )
 
     if (existsSync(enabledPath)) {
       await rename(enabledPath, disabledPath)

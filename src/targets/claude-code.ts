@@ -1,9 +1,22 @@
+import { existsSync, lstatSync } from 'node:fs'
+import {
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
+import { homedir } from 'node:os'
 // src/targets/claude-code.ts
-import { join, basename } from 'path'
-import { homedir } from 'os'
-import { existsSync, lstatSync } from 'fs'
-import { mkdir, readdir, symlink, unlink, writeFile, rm, rename } from 'fs/promises'
-import type { Target, InstallOptions, SkillContent, InstalledSkill } from '@/types'
+import { basename, join } from 'node:path'
+import type {
+  InstallOptions,
+  InstalledSkill,
+  SkillContent,
+  Target,
+} from '@/types'
 
 import { isWindows } from '@/utils/platform'
 
@@ -19,9 +32,10 @@ export class ClaudeCodeTarget implements Target {
   }
 
   async install(skill: SkillContent, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     const skillName = this.getSkillName(skill.id)
     const targetDir = join(basePath, skillName)
@@ -38,9 +52,10 @@ export class ClaudeCodeTarget implements Target {
   }
 
   async uninstall(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
     const skillDir = join(basePath, skillName)
@@ -56,10 +71,14 @@ export class ClaudeCodeTarget implements Target {
     }
   }
 
-  async list(scope: 'global' | 'project', projectPath?: string): Promise<InstalledSkill[]> {
-    const basePath = scope === 'project' && projectPath
-      ? this.getProjectPath(projectPath)
-      : this.getGlobalPath()
+  async list(
+    scope: 'global' | 'project',
+    projectPath?: string,
+  ): Promise<InstalledSkill[]> {
+    const basePath =
+      scope === 'project' && projectPath
+        ? this.getProjectPath(projectPath)
+        : this.getGlobalPath()
 
     if (!existsSync(basePath)) {
       return []
@@ -91,9 +110,10 @@ export class ClaudeCodeTarget implements Target {
   }
 
   async enable(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
     const disabledPath = join(basePath, `${skillName}.disabled`)
@@ -105,9 +125,10 @@ export class ClaudeCodeTarget implements Target {
   }
 
   async disable(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
     const enabledPath = join(basePath, skillName)
@@ -141,7 +162,10 @@ ${skill.content}`
   /**
    * Create symlink to a directory with cross-platform support
    */
-  protected async createDirSymlink(sourceDir: string, targetDir: string): Promise<void> {
+  protected async createDirSymlink(
+    sourceDir: string,
+    targetDir: string,
+  ): Promise<void> {
     // Remove existing directory/link first
     if (existsSync(targetDir)) {
       const stats = lstatSync(targetDir)

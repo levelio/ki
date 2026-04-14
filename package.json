@@ -11,22 +11,32 @@
   "keywords": ["skill", "ai", "claude", "cursor", "cli"],
   "type": "module",
   "bin": {
-    "ki": "./src/cli.ts"
+    "ki": "./dist/cli.js"
   },
+  "files": ["dist"],
   "scripts": {
-    "dev": "bun run src/cli.ts",
-    "build": "bun build ./src/cli.ts --compile --outfile dist/ki",
-    "build:macos": "bun build ./src/cli.ts --compile --target=darwin-x64 --outfile dist/ki-darwin-x64 && bun build ./src/cli.ts --compile --target=darwin-arm64 --outfile dist/ki-darwin-arm64",
-    "build:linux": "bun build ./src/cli.ts --compile --target=linux-x64 --outfile dist/ki-linux-x64",
-    "build:windows": "bun build ./src/cli.ts --compile --target=windows-x64 --outfile dist/ki-windows-x64.exe",
-    "build:all": "bun run build:macos && bun run build:linux && bun run build:windows",
-    "test": "bun test"
+    "dev": "tsx src/cli.ts",
+    "build": "tsup src/cli.ts --format esm --platform node --target node20 --out-dir dist --clean",
+    "test": "vitest run",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "changeset": "changeset",
+    "check:changeset": "node scripts/check-changeset.mjs",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.10"
+    "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.29.6",
+    "@types/node": "^24.6.1",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   },
-  "peerDependencies": {
-    "typescript": "^5"
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "@clack/core": "^1.1.0",

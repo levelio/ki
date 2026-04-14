@@ -1,8 +1,8 @@
+import { existsSync } from 'node:fs'
 // src/providers/local.ts
-import { readdir, readFile } from 'fs/promises'
-import { join, dirname, basename } from 'path'
-import { existsSync } from 'fs'
-import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
+import { readFile, readdir } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
+import type { Provider, SkillContent, SkillMeta, SourceConfig } from '@/types'
 import { computeFileChecksum } from '@/utils'
 
 /**
@@ -54,9 +54,10 @@ export class LocalProvider implements Provider {
     for (const skillsPath of skillsPaths) {
       if (!existsSync(skillsPath)) continue
 
-      const skills = structure === 'flat'
-        ? await this.discoverFlat(config, skillsPath, skillFile)
-        : await this.discoverNested(config, skillsPath, skillFile)
+      const skills =
+        structure === 'flat'
+          ? await this.discoverFlat(config, skillsPath, skillFile)
+          : await this.discoverNested(config, skillsPath, skillFile)
 
       allSkills.push(...skills)
     }
@@ -81,7 +82,10 @@ export class LocalProvider implements Provider {
   /**
    * Parse skillsPath option, supporting both string and array formats
    */
-  private getSkillsPaths(options: Record<string, unknown>, basePath: string): string[] {
+  private getSkillsPaths(
+    options: Record<string, unknown>,
+    basePath: string,
+  ): string[] {
     const { skillsPath, path } = options
 
     // Support both 'skillsPath' and 'path' for backward compatibility
@@ -92,7 +96,7 @@ export class LocalProvider implements Provider {
     }
 
     if (Array.isArray(skillDir)) {
-      return skillDir.map(p => join(basePath, p as string))
+      return skillDir.map((p) => join(basePath, p as string))
     }
 
     return [join(basePath, skillDir as string)]
@@ -101,7 +105,7 @@ export class LocalProvider implements Provider {
   private async discoverNested(
     config: SourceConfig,
     skillsPath: string,
-    skillFile: string
+    skillFile: string,
   ): Promise<SkillMeta[]> {
     const skills: SkillMeta[] = []
     const entries = await readdir(skillsPath, { withFileTypes: true })
@@ -134,7 +138,7 @@ export class LocalProvider implements Provider {
   private async discoverFlat(
     config: SourceConfig,
     skillsPath: string,
-    skillFile: string
+    skillFile: string,
   ): Promise<SkillMeta[]> {
     const skills: SkillMeta[] = []
     const entries = await readdir(skillsPath, { withFileTypes: true })
@@ -165,7 +169,10 @@ export class LocalProvider implements Provider {
     return skills
   }
 
-  private async parseSkillMetadata(filePath: string, fallbackName: string): Promise<Partial<SkillMeta>> {
+  private async parseSkillMetadata(
+    filePath: string,
+    fallbackName: string,
+  ): Promise<Partial<SkillMeta>> {
     const meta: Partial<SkillMeta> = { name: fallbackName }
 
     try {

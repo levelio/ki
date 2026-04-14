@@ -1,19 +1,23 @@
-// src/config/loader.ts
-import { parse, stringify } from 'yaml'
-import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { homedir } from 'os'
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Config, TargetConfig } from '@/types'
 import { DEFAULT_CONFIG } from '@/types'
 import type { SourceConfig } from '@/types'
+// src/config/loader.ts
+import { parse, stringify } from 'yaml'
 
 const CONFIG_DIR = join(homedir(), '.config', 'ki')
 const CONFIG_FILE = join(CONFIG_DIR, 'config.yaml')
 
 export async function loadConfig(): Promise<Config> {
   // Start with default config
-  let config = { ...DEFAULT_CONFIG, sources: [...DEFAULT_CONFIG.sources], targets: [...DEFAULT_CONFIG.targets] }
+  let config = {
+    ...DEFAULT_CONFIG,
+    sources: [...DEFAULT_CONFIG.sources],
+    targets: [...DEFAULT_CONFIG.targets],
+  }
 
   // Try to load user config
   if (existsSync(CONFIG_FILE)) {
@@ -52,13 +56,13 @@ function mergeConfig(defaults: Config, user: Partial<Config>): Config {
 function mergeArrays<T extends { name: string }>(
   defaults: T[],
   user: Partial<T>[],
-  key: keyof T
+  key: keyof T,
 ): T[] {
   const result = [...defaults]
-  const userMap = new Map(user.map(item => [item[key], item]))
+  const userMap = new Map(user.map((item) => [item[key], item]))
 
   for (const [name, userItem] of userMap) {
-    const defaultIndex = result.findIndex(item => item[key] === name)
+    const defaultIndex = result.findIndex((item) => item[key] === name)
 
     if (defaultIndex >= 0) {
       // Merge with default

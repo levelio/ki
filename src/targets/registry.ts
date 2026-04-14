@@ -1,5 +1,5 @@
 // src/targets/registry.ts
-import type { Target, TargetConfig, SkillContent } from '@/types'
+import type { SkillContent, Target, TargetConfig } from '@/types'
 import { ClaudeCodeTarget } from './claude-code'
 import { CursorTarget } from './cursor'
 
@@ -30,8 +30,8 @@ class TargetRegistry {
 
   getEnabled(configs: TargetConfig[]): Target[] {
     return configs
-      .filter(c => c.enabled)
-      .map(c => this.get(c.name))
+      .filter((c) => c.enabled)
+      .map((c) => this.get(c.name))
       .filter((t): t is Target => t !== undefined)
   }
 
@@ -39,26 +39,28 @@ class TargetRegistry {
     skill: SkillContent,
     enabledConfigs: TargetConfig[],
     scope: 'global' | 'project',
-    projectPath?: string
+    projectPath?: string,
   ): Promise<void> {
     const targets = this.getEnabled(enabledConfigs)
 
-    await Promise.all(targets.map(target =>
-      target.install(skill, { scope, projectPath })
-    ))
+    await Promise.all(
+      targets.map((target) => target.install(skill, { scope, projectPath })),
+    )
   }
 
   async uninstallFromAll(
     skillId: string,
     enabledConfigs: TargetConfig[],
     scope: 'global' | 'project',
-    projectPath?: string
+    projectPath?: string,
   ): Promise<void> {
     const targets = this.getEnabled(enabledConfigs)
 
-    await Promise.all(targets.map(target =>
-      target.uninstall(skillId, { scope, projectPath })
-    ))
+    await Promise.all(
+      targets.map((target) =>
+        target.uninstall(skillId, { scope, projectPath }),
+      ),
+    )
   }
 }
 

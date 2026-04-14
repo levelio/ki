@@ -1,5 +1,5 @@
 // src/utils/platform.ts
-import { platform } from 'os'
+import { platform } from 'node:os'
 
 export function isWindows(): boolean {
   return platform() === 'win32'

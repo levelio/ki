@@ -5,7 +5,10 @@ export interface DiffLine {
   content: string
 }
 
-export function computeDiff(oldContent: string, newContent: string): DiffLine[] {
+export function computeDiff(
+  oldContent: string,
+  newContent: string,
+): DiffLine[] {
   const oldLines = oldContent.split('\n')
   const newLines = newContent.split('\n')
   const result: DiffLine[] = []
@@ -51,8 +54,11 @@ export function computeDiff(oldContent: string, newContent: string): DiffLine[] 
 }
 
 export function formatDiff(diff: DiffLine[]): string {
-  return diff.map(line => {
-    const prefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '
-    return `${prefix} ${line.content}`
-  }).join('\n')
+  return diff
+    .map((line) => {
+      const prefix =
+        line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '
+      return `${prefix} ${line.content}`
+    })
+    .join('\n')
 }

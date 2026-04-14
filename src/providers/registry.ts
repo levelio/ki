@@ -1,7 +1,7 @@
 // src/providers/registry.ts
-import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
-import { LocalProvider } from './local'
+import type { Provider, SkillContent, SkillMeta, SourceConfig } from '@/types'
 import { GitProvider } from './git'
+import { LocalProvider } from './local'
 
 class ProviderRegistry {
   private providers: Map<string, Provider> = new Map()
@@ -54,7 +54,10 @@ class ProviderRegistry {
     await provider.sync(config)
   }
 
-  async fetchContent(skill: SkillMeta, config: SourceConfig): Promise<SkillContent> {
+  async fetchContent(
+    skill: SkillMeta,
+    config: SourceConfig,
+  ): Promise<SkillContent> {
     const provider = this.get(config.provider)
     if (!provider) {
       throw new Error(`Provider not found: ${config.provider}`)

@@ -1,5 +1,5 @@
 // src/types/provider.ts
-import type { SkillMeta, SkillContent } from './skill'
+import type { SkillContent, SkillMeta } from './skill'
 
 export interface SourceConfig {
   name: string

@@ -27,12 +27,40 @@ ki 是一个跨工具的 Skill 管理器，帮助用户在多个 AI 编码工具
 
 ```bash
 ki init                    # 创建默认配置
-ki source sync             # 同步所有源
-ki list                    # 查看可用技能
-ki install                 # 交互式安装
+ki source sync ki          # 同步本仓库内置的 ki 源
+ki source skills ki        # 查看本仓库自带技能
+ki install ki:ki-usage -t claude-code -y
+ki list                    # 查看所有可用技能
 ```
 
-### 添加新技能源
+### 安装本仓库自带 skill
+
+`ki init` 生成的默认配置已经内置了当前仓库的 `ki` Git 源：
+
+```yaml
+sources:
+  - name: ki
+    provider: git
+    url: https://github.com/levelio/ki.git
+    enabled: true
+```
+
+推荐安装流程：
+
+```bash
+ki init
+ki source sync ki
+ki source skills ki
+ki install ki:ki-usage -t claude-code -y
+```
+
+如果需要安装到多个目标工具：
+
+```bash
+ki install ki:ki-usage -t claude-code,cursor -y
+```
+
+### 添加其他技能源
 
 编辑 `~/.config/ki/config.yaml`：
 
@@ -50,6 +78,22 @@ sources:
 ki source sync my-skills
 ki source skills my-skills
 ki install my-skills:skill-name
+```
+
+### 安装后如何使用
+
+安装完成后，可以在目标 AI 工具中明确要求使用 `ki-usage` skill 来处理 `ki` 相关问题，例如：
+
+```text
+使用 ki-usage skill，帮我检查当前 ki 配置并列出所有 source。
+```
+
+```text
+使用 ki-usage skill，告诉我如何把 ki 源里的 skill 安装到 claude-code。
+```
+
+```text
+使用 ki-usage skill，帮我排查 ki source sync 后为什么还是看不到技能。
 ```
 
 ### 多目录源配置
@@ -113,12 +157,11 @@ ki install                          # 交互式多选
 ki install brainstorming            # 搜索后多选
 ki install superpowers:brainstorming -t claude-code -y  # 非交互式安装
 ki install -t claude-code,cursor    # 指定目标
-ki install --project                # 项目级安装
 ```
 
 ### 非交互式安装
 
-使用 `-y/--yes` 参数跳过交互式确认（需要同时指定 skill ID 和目标）：
+使用 `-y/--yes` 参数跳过交互式确认。稳定路径是同时指定 skill ID 和目标：
 
 ```bash
 ki install superpowers:brainstorming -t claude-code -y
@@ -130,8 +173,12 @@ ki install superpowers:brainstorming -t claude-code -y
 |------|------|------|
 | 技能列表为空 | 源未同步 | `ki source sync` |
 | 找不到源 | 配置错误 | 检查 `~/.config/ki/config.yaml` |
-| 安装失败 | 目标目录不存在 | 手动创建目标工具配置目录 |
+| 安装失败 | 目标名称无效或目标工具不可用 | 检查 `targets` 配置和目标工具环境 |
 | Git 同步失败 | 网络或权限问题 | 检查 URL 和访问权限 |
+
+## 当前限制
+
+- `ki install --project` 会写入项目目录，但后续 `ki update` / `ki uninstall` 还没有完整保留项目作用域，当前更推荐全局安装。
 
 ## SKILL.md 格式
 
