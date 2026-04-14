@@ -8,20 +8,12 @@
     "type": "git",
     "url": "git+https://github.com/levelio/ki.git"
   },
-  "keywords": [
-    "skill",
-    "ai",
-    "claude",
-    "cursor",
-    "cli"
-  ],
+  "keywords": ["skill", "ai", "claude", "cursor", "cli"],
   "type": "module",
   "bin": {
     "ki": "./dist/cli.js"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsup src/cli.ts --format esm --platform node --target node20 --out-dir dist --clean",
@@ -31,7 +23,7 @@
     "check": "biome check .",
     "changeset": "changeset",
     "check:changeset": "node scripts/check-changeset.mjs",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && biome format --write package.json package-lock.json",
     "release": "changeset publish"
   },
   "devDependencies": {
