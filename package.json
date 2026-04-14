@@ -11,7 +11,7 @@
   "keywords": ["skill", "ai", "claude", "cursor", "cli"],
   "type": "module",
   "bin": {
-    "ki": "./dist/cli.js"
+    "ki": "dist/cli.js"
   },
   "files": ["dist"],
   "scripts": {
