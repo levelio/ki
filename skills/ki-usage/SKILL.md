@@ -85,15 +85,15 @@ ki install my-skills:skill-name
 安装完成后，可以在目标 AI 工具中明确要求使用 `ki-usage` skill 来处理 `ki` 相关问题，例如：
 
 ```text
-使用 ki-usage skill，帮我检查当前 ki 配置并列出所有 source。
+使用 ki-usage skill，帮我添加一个 Git 技能源，地址是 https://github.com/acme/product-skills.git，源名称叫 acme-skills。
 ```
 
 ```text
-使用 ki-usage skill，告诉我如何把 ki 源里的 skill 安装到 claude-code。
+使用 ki-usage skill，帮我看一下 acme-skills 这个源中都有哪些技能。
 ```
 
 ```text
-使用 ki-usage skill，帮我排查 ki source sync 后为什么还是看不到技能。
+使用 ki-usage skill，帮我把 acme-skills 里的 prd-review 技能安装到 claude-code。
 ```
 
 ### 多目录源配置

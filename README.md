@@ -80,15 +80,15 @@ ki install ki:ki-usage -t claude-code,cursor -y
 安装完成后，可以在目标 AI 工具里直接要求它使用这个 skill 来处理 `ki` 相关任务，例如：
 
 ```text
-使用 ki-usage skill，帮我检查当前 ki 配置并列出可用技能源。
+使用 ki-usage skill，帮我添加一个 Git 技能源，地址是 https://github.com/acme/product-skills.git，源名称叫 acme-skills。
 ```
 
 ```text
-使用 ki-usage skill，告诉我如何从 ki 源安装某个 skill 到 claude-code。
+使用 ki-usage skill，帮我看一下 acme-skills 这个源中都有哪些技能。
 ```
 
 ```text
-使用 ki-usage skill，帮我排查为什么 ki source sync 没有拉到技能列表。
+使用 ki-usage skill，帮我把 acme-skills 里的 prd-review 技能安装到 claude-code。
 ```
 
 ## 命令参考

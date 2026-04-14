@@ -80,15 +80,15 @@ ki install ki:ki-usage -t claude-code,cursor -y
 Once installed, ask the target AI tool to use the skill for `ki`-related tasks. Example prompts:
 
 ```text
-Use the ki-usage skill to inspect my current ki config and list the available sources.
+Use the ki-usage skill to add a Git source for me: https://github.com/acme/product-skills.git, and name it acme-skills.
 ```
 
 ```text
-Use the ki-usage skill to show me how to install a skill from the ki source into claude-code.
+Use the ki-usage skill to show me which skills are available in the acme-skills source.
 ```
 
 ```text
-Use the ki-usage skill to troubleshoot why ki source sync did not fetch any skills.
+Use the ki-usage skill to install the acme-skills:prd-review skill into claude-code.
 ```
 
 ## Command Reference
