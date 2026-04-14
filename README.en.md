@@ -157,9 +157,10 @@ Release contract:
 
 - user-visible changes should run `npm run changeset`
 - the workflow runs `npm ci`, `npm run check`, `npm test`, and `npm run build`
+- the publish job uses npm trusted publishing with GitHub OIDC instead of a long-lived `NPM_TOKEN`
 - the Changesets action creates or updates the release PR
 - merging the release PR runs `npm publish`
-- the repository must provide `NPM_TOKEN` in GitHub Actions secrets
+- npm must be configured to trust `.github/workflows/release.yml` as a publisher for this package
 
 ## Current Limitations
 
