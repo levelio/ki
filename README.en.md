@@ -1,8 +1,22 @@
 English | [简体中文](./README.md)
 
-# ki
+<p align="center">
+  <img src="./assets/ki-logo.jpg" alt="ki logo" width="260" />
+</p>
 
-A cross-tool Skill Manager that helps you manage and sync skills across multiple AI coding tools such as Claude Code and Cursor.
+<h1 align="center">ki</h1>
+
+<p align="center">
+  A cross-tool Skill Manager that helps you manage and sync skills across multiple AI coding tools.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/ki-skill"><img src="https://img.shields.io/npm/v/ki-skill?logo=npm&color=CB3837" alt="npm version" /></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white" alt="node >= 20" />
+  <a href="https://github.com/levelio/ki/actions/workflows/changeset-check.yml"><img src="https://img.shields.io/github/actions/workflow/status/levelio/ki/changeset-check.yml?branch=main&label=checks" alt="checks" /></a>
+  <img src="https://img.shields.io/badge/license-MIT-0E8A16" alt="MIT license" />
+  <img src="https://img.shields.io/badge/targets-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-748E49" alt="targets" />
+</p>
 
 ## Features
 

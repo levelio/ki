@@ -1,8 +1,22 @@
 [English](./README.en.md) | 简体中文
 
-# ki
+<p align="center">
+  <img src="./assets/ki-logo.jpg" alt="ki logo" width="260" />
+</p>
 
-跨工具 Skill 管理器，帮助你在多个 AI 编码工具（Claude Code、Codex、Cursor 等）之间统一管理和同步技能。
+<h1 align="center">ki</h1>
+
+<p align="center">
+  跨工具 Skill 管理器，帮助你在多个 AI 编码工具之间统一管理和同步技能。
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/ki-skill"><img src="https://img.shields.io/npm/v/ki-skill?logo=npm&color=CB3837" alt="npm version" /></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white" alt="node >= 20" />
+  <a href="https://github.com/levelio/ki/actions/workflows/changeset-check.yml"><img src="https://img.shields.io/github/actions/workflow/status/levelio/ki/changeset-check.yml?branch=main&label=checks" alt="checks" /></a>
+  <img src="https://img.shields.io/badge/license-MIT-0E8A16" alt="MIT license" />
+  <img src="https://img.shields.io/badge/targets-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-748E49" alt="targets" />
+</p>
 
 适合这样的场景：
 

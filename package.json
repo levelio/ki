@@ -13,7 +13,7 @@
   "bin": {
     "ki": "dist/cli.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "assets"],
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsup",
