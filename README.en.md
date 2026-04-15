@@ -204,8 +204,8 @@ Notes:
 | `ki doctor` | Check config and install health |
 | `ki search <query>` | Search skills by name or id |
 | `ki list` | List all available skills |
-| `ki install [search]` | Install an exact skill id; pass `-i/--interactive` to enter the TUI |
-| `ki uninstall [search]` | Uninstall an exact skill id without implicit interaction |
+| `ki install [search]` | In non-interactive mode, requires an exact skill id; when multiple targets are enabled, also requires `-t/--target`; pass `-i/--interactive` to enter the TUI |
+| `ki uninstall [search]` | In non-interactive mode, requires an exact skill id; in most cases also requires `-t/--target` plus `--global` or `--project`; no implicit interaction |
 | `ki update` | Update all installed skills |
 | `ki source add <git-url-or-path> [flags]` | Add a Git or local source and optionally set source options at the same time |
 | `ki source set <name> [flags]` | Update an existing source's options or enabled state |

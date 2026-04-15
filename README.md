@@ -210,8 +210,8 @@ ki source remove acme
 | `ki doctor` | 检查配置和安装状态是否异常 |
 | `ki search <query>` | 按名称或 ID 搜索技能 |
 | `ki list` | 列出所有可用技能 |
-| `ki install [search]` | 安装精确 skill id；传 `-i/--interactive` 时进入 TUI |
-| `ki uninstall [search]` | 卸载精确 skill id，不支持隐式交互 |
+| `ki install [search]` | 非交互时要求精确 skill id；多 target 场景下还需显式传 `-t/--target`；传 `-i/--interactive` 时进入 TUI |
+| `ki uninstall [search]` | 非交互时要求精确 skill id；通常还需显式传 `-t/--target` 和 `--global` 或 `--project`，不支持隐式交互 |
 | `ki update` | 更新所有已安装技能 |
 | `ki source add <git-url-or-path> [flags]` | 添加一个 Git 或本地目录技能源，并可同时设置 source options |
 | `ki source set <name> [flags]` | 更新一个已有 source 的 options 或启用状态 |
