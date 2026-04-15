@@ -229,7 +229,7 @@ npm run changeset
 
 - 用户可见的改动应运行 `npm run changeset`
 - workflow 使用 `npm ci`、`npm run check`、`npm test`、`npm run build`
-- 发布 job 优先通过 npm trusted publishing 使用 GitHub OIDC；如果仓库配置了 `NPM_TOKEN` secret，也支持回退到 token 发布
+- 发布 job 通过 npm trusted publishing 使用 GitHub OIDC，不再依赖长期 `NPM_TOKEN`
 - Changesets action 会创建或更新 release PR
 - release PR 合并后执行 `npm publish`
 - 需要在 npm 包设置中把仓库的 `.github/workflows/release.yml` 配置为 trusted publisher

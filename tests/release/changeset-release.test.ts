@@ -50,6 +50,6 @@ describe('changesets release workflow helpers', () => {
     expect(changesetsStep?.env?.GITHUB_TOKEN).toBe(
       '${{ secrets.GITHUB_TOKEN }}',
     )
-    expect(changesetsStep?.env?.NPM_TOKEN).toBe('${{ secrets.NPM_TOKEN }}')
+    expect(changesetsStep?.env?.NPM_TOKEN).toBeUndefined()
   })
 })
