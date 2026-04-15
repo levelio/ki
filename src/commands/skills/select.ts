@@ -1,7 +1,5 @@
 import * as p from '@clack/prompts'
-import {
-  type InstalledRecord,
-} from '../../installed'
+import type { InstalledRecord } from '../../installed'
 import type { CliFlags, TargetConfig } from '../../types'
 
 interface SkillOption {

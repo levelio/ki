@@ -34,7 +34,10 @@ describe('skill selection helpers', () => {
       selectInstallSkillIds([{ id: 'source:alpha' }], false),
     ).resolves.toEqual(['source:alpha'])
     await expect(
-      selectInstallSkillIds([{ id: 'source:alpha' }, { id: 'source:beta' }], false),
+      selectInstallSkillIds(
+        [{ id: 'source:alpha' }, { id: 'source:beta' }],
+        false,
+      ),
     ).resolves.toBeNull()
   })
 
@@ -61,9 +64,9 @@ describe('skill selection helpers', () => {
   })
 
   it('selects uninstall records only when input is unambiguous', async () => {
-    await expect(selectUninstallRecords([globalRecord])).resolves.toEqual(
-      [globalRecord],
-    )
+    await expect(selectUninstallRecords([globalRecord])).resolves.toEqual([
+      globalRecord,
+    ])
     await expect(
       selectUninstallRecords([globalRecord, projectRecord]),
     ).resolves.toBeNull()

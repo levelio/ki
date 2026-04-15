@@ -46,13 +46,7 @@ function createConfig(overrides: Partial<Config> = {}): Config {
 describe('cli', () => {
   it('parseFlags parses long flags, short flags, and positional args', () => {
     expect(
-      parseFlags([
-        'install',
-        '--target',
-        'codex,cursor',
-        '-i',
-        '--project',
-      ]),
+      parseFlags(['install', '--target', 'codex,cursor', '-i', '--project']),
     ).toEqual({
       _: ['install'],
       target: 'codex,cursor',
@@ -395,9 +389,7 @@ describe('cli', () => {
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining('Source commands:'),
     )
-    expect(log).toHaveBeenCalledWith(
-      expect.stringContaining('Source flags:'),
-    )
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Source flags:'))
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining('--skills-path <list>'),
     )

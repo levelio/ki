@@ -89,11 +89,7 @@ export async function installSkill(
     return
   }
 
-  const targets = await selectInstallTargets(
-    config.targets,
-    flags,
-    interactive,
-  )
+  const targets = await selectInstallTargets(config.targets, flags, interactive)
   if (!targets) {
     if (interactive) {
       p.outro('Cancelled')

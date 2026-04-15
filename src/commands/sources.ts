@@ -173,9 +173,10 @@ function getSourceEnableUpdate(
   return null
 }
 
-function getEffectiveSourceOptions(
-  source: SourceConfig,
-): Record<string, unknown> & {
+function getEffectiveSourceOptions(source: SourceConfig): Record<
+  string,
+  unknown
+> & {
   branch?: string
   skillsPath: string | string[]
   structure: string
@@ -227,6 +228,14 @@ function printOptionsBlock(
       console.log(line)
     }
   }
+}
+
+function pruneUndefinedOptions(
+  options: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(options).filter(([, value]) => value !== undefined),
+  )
 }
 
 export async function sourceList(config: Pick<Config, 'sources'>) {
@@ -405,8 +414,9 @@ export async function sourceSet(
 
   const nextOptions = { ...(source.options || {}), ...options }
   if ('skillsPath' in options) {
-    delete nextOptions.path
+    nextOptions.path = undefined
   }
+  const cleanedOptions = pruneUndefinedOptions(nextOptions)
   const hasOptionUpdates = Object.keys(options).length > 0
   const hasEnabledUpdate = enabled !== null
   if (!hasOptionUpdates && !hasEnabledUpdate) {
@@ -415,7 +425,7 @@ export async function sourceSet(
   }
 
   source.options =
-    Object.keys(nextOptions).length > 0 ? nextOptions : undefined
+    Object.keys(cleanedOptions).length > 0 ? cleanedOptions : undefined
   if (enabled !== null) {
     source.enabled = enabled
   }
@@ -452,11 +462,12 @@ export async function sourceUnset(
     delete nextOptions[key]
   }
   if (flags['skills-path'] === true) {
-    delete nextOptions.path
+    nextOptions.path = undefined
   }
+  const cleanedOptions = pruneUndefinedOptions(nextOptions)
 
   source.options =
-    Object.keys(nextOptions).length > 0 ? nextOptions : undefined
+    Object.keys(cleanedOptions).length > 0 ? cleanedOptions : undefined
 
   await saveConfig(config)
   p.log.success(`Unset source options: ${sourceName}`)
