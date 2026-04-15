@@ -46,7 +46,7 @@ describe('changesets release workflow helpers', () => {
     )
 
     expect(workflow.permissions['id-token']).toBe('write')
-    expect(setupNodeStep?.with?.['node-version']).toBe(20)
+    expect(setupNodeStep?.with?.['node-version']).toBe(24)
     expect(changesetsStep?.env?.GITHUB_TOKEN).toBe(
       '${{ secrets.GITHUB_TOKEN }}',
     )
