@@ -1,6 +1,8 @@
-import { describe, expect, it, mock } from 'bun:test'
+import { describe, expect, it, vi } from 'vitest'
 import { TargetRegistry } from '../../src/targets/registry'
 import type { SkillContent, Target } from '../../src/types'
+
+const mock = vi.fn
 
 function createTarget(name: string) {
   return {
@@ -29,7 +31,7 @@ describe('TargetRegistry', () => {
         { name: 'codex', enabled: true },
         { name: 'cursor', enabled: false },
         { name: 'missing', enabled: true },
-      ])
+      ]),
     ).toEqual([codex])
   })
 
@@ -53,7 +55,7 @@ describe('TargetRegistry', () => {
         { name: 'cursor', enabled: true },
         { name: 'missing', enabled: true },
       ],
-      'global'
+      'global',
     )
 
     expect(codex.install).toHaveBeenCalledWith(skill, { scope: 'global' })
@@ -75,7 +77,7 @@ describe('TargetRegistry', () => {
       skill,
       [{ name: 'codex', enabled: true }],
       'project',
-      '/tmp/project'
+      '/tmp/project',
     )
 
     expect(codex.install).toHaveBeenCalledWith(skill, {
@@ -99,7 +101,7 @@ describe('TargetRegistry', () => {
         { name: 'cursor', enabled: true },
       ],
       'project',
-      '/tmp/project'
+      '/tmp/project',
     )
 
     expect(codex.uninstall).toHaveBeenCalledWith('source:alpha', {

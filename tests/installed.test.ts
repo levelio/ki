@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import {
+  type InstalledRecord,
   filterInstalledRecordsByScope,
   findInstalledRecordIndex,
   formatRecordLabel,
@@ -9,7 +10,6 @@ import {
   getRecordKey,
   getSkillSummary,
   sortInstalledRecords,
-  type InstalledRecord,
 } from '../src/installed'
 
 const globalRecord: InstalledRecord = {
@@ -47,10 +47,14 @@ const projectRecordB: InstalledRecord = {
 describe('installed helpers', () => {
   it('builds stable keys and locations', () => {
     expect(getRecordKey(globalRecord)).toBe('source:alpha::global::')
-    expect(getRecordKey(projectRecordA)).toBe('source:alpha::project::/tmp/project-a')
+    expect(getRecordKey(projectRecordA)).toBe(
+      'source:alpha::project::/tmp/project-a',
+    )
     expect(formatRecordLocation(globalRecord)).toBe('global')
     expect(formatRecordLocation(projectRecordA)).toBe('project:/tmp/project-a')
-    expect(formatRecordLabel(projectRecordA)).toBe('source:alpha (project:/tmp/project-a) [cursor]')
+    expect(formatRecordLabel(projectRecordA)).toBe(
+      'source:alpha (project:/tmp/project-a) [cursor]',
+    )
   })
 
   it('finds records by id + scope + projectPath', () => {
@@ -58,29 +62,50 @@ describe('installed helpers', () => {
 
     expect(findInstalledRecordIndex(records, globalRecord)).toBe(0)
     expect(findInstalledRecordIndex(records, projectRecordA)).toBe(1)
-    expect(findInstalledRecordIndex(records, {
-      id: 'source:alpha',
-      scope: 'project',
-      projectPath: '/tmp/missing',
-    })).toBe(-1)
+    expect(
+      findInstalledRecordIndex(records, {
+        id: 'source:alpha',
+        scope: 'project',
+        projectPath: '/tmp/missing',
+      }),
+    ).toBe(-1)
   })
 
   it('filters and groups records by scope and skill id', () => {
     const records = [globalRecord, projectRecordA, projectRecordB]
 
-    expect(filterInstalledRecordsByScope(records, { global: true }, '/tmp/project-a')).toEqual([globalRecord])
-    expect(filterInstalledRecordsByScope(records, { project: true }, '/tmp/project-a')).toEqual([projectRecordA])
-    expect(getInstalledRecordsForSkill(records, 'source:alpha')).toEqual([globalRecord, projectRecordA])
+    expect(
+      filterInstalledRecordsByScope(
+        records,
+        { global: true },
+        '/tmp/project-a',
+      ),
+    ).toEqual([globalRecord])
+    expect(
+      filterInstalledRecordsByScope(
+        records,
+        { project: true },
+        '/tmp/project-a',
+      ),
+    ).toEqual([projectRecordA])
+    expect(getInstalledRecordsForSkill(records, 'source:alpha')).toEqual([
+      globalRecord,
+      projectRecordA,
+    ])
   })
 
   it('sorts records with global first then project path', () => {
-    const sorted = sortInstalledRecords([projectRecordB, projectRecordA, globalRecord])
+    const sorted = sortInstalledRecords([
+      projectRecordB,
+      projectRecordA,
+      globalRecord,
+    ])
     expect(sorted).toEqual([globalRecord, projectRecordA, projectRecordB])
   })
 
   it('summarizes targets and returns strict install options', () => {
     expect(getSkillSummary([globalRecord, projectRecordA])).toBe(
-      'claude-code @ global; codex @ global; cursor @ project:/tmp/project-a'
+      'claude-code @ global; codex @ global; cursor @ project:/tmp/project-a',
     )
     expect(getRecordInstallOptions(globalRecord)).toEqual({ scope: 'global' })
     expect(getRecordInstallOptions(projectRecordA)).toEqual({

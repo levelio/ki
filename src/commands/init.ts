@@ -1,8 +1,8 @@
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import * as p from '@clack/prompts'
 import { saveConfig } from '../config'
-import { existsSync } from 'fs'
-import { join } from 'path'
-import { homedir } from 'os'
 import { DEFAULT_CONFIG } from '../types'
 
 export async function initConfig() {
@@ -13,7 +13,7 @@ export async function initConfig() {
   if (existsSync(configPath)) {
     const overwrite = await p.confirm({
       message: 'Config file already exists. Overwrite?',
-      initialValue: false
+      initialValue: false,
     })
 
     if (!overwrite || p.isCancel(overwrite)) {

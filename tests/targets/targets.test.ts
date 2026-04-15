@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from 'bun:test'
-import { existsSync, lstatSync } from 'fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { existsSync, lstatSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import { ClaudeCodeTarget } from '../../src/targets/claude-code'
 import { CodexTarget } from '../../src/targets/codex'
 import { CursorTarget } from '../../src/targets/cursor'
@@ -17,7 +17,9 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  )
 })
 
 describe('target project installs', () => {
@@ -32,7 +34,13 @@ describe('target project installs', () => {
 
     await target.install(skill, { scope: 'project', projectPath: projectDir })
 
-    const skillFile = join(projectDir, '.claude', 'skills', 'brainstorming', 'SKILL.md')
+    const skillFile = join(
+      projectDir,
+      '.claude',
+      'skills',
+      'brainstorming',
+      'SKILL.md',
+    )
     expect(existsSync(skillFile)).toBe(true)
     const content = await readFile(skillFile, 'utf-8')
     expect(content).toContain('name: brainstorming')
@@ -42,8 +50,13 @@ describe('target project installs', () => {
     expect(listed).toHaveLength(1)
     expect(listed[0].id).toBe('brainstorming')
 
-    await target.uninstall('source:brainstorming', { scope: 'project', projectPath: projectDir })
-    expect(existsSync(join(projectDir, '.claude', 'skills', 'brainstorming'))).toBe(false)
+    await target.uninstall('source:brainstorming', {
+      scope: 'project',
+      projectPath: projectDir,
+    })
+    expect(
+      existsSync(join(projectDir, '.claude', 'skills', 'brainstorming')),
+    ).toBe(false)
   })
 
   it('CursorTarget installs via file symlink when sourcePath exists and removes cleanly', async () => {
@@ -63,7 +76,13 @@ describe('target project installs', () => {
 
     await target.install(skill, { scope: 'project', projectPath: projectDir })
 
-    const skillFile = join(projectDir, '.cursor', 'skills', 'cursor-skill', 'SKILL.md')
+    const skillFile = join(
+      projectDir,
+      '.cursor',
+      'skills',
+      'cursor-skill',
+      'SKILL.md',
+    )
     expect(existsSync(skillFile)).toBe(true)
     expect(lstatSync(skillFile).isSymbolicLink()).toBe(true)
 
@@ -71,15 +90,23 @@ describe('target project installs', () => {
     expect(listed).toHaveLength(1)
     expect(listed[0].id).toBe('cursor-skill')
 
-    await target.uninstall('source:cursor-skill', { scope: 'project', projectPath: projectDir })
-    expect(existsSync(join(projectDir, '.cursor', 'skills', 'cursor-skill'))).toBe(false)
+    await target.uninstall('source:cursor-skill', {
+      scope: 'project',
+      projectPath: projectDir,
+    })
+    expect(
+      existsSync(join(projectDir, '.cursor', 'skills', 'cursor-skill')),
+    ).toBe(false)
   })
 
   it('CodexTarget symlinks source directories for project installs', async () => {
     const projectDir = await makeTempDir('ki-codex-target-')
     const sourceDir = await makeTempDir('ki-codex-source-')
     await mkdir(sourceDir, { recursive: true })
-    await writeFile(join(sourceDir, 'SKILL.md'), '# Codex Skill\n\nCodex content.')
+    await writeFile(
+      join(sourceDir, 'SKILL.md'),
+      '# Codex Skill\n\nCodex content.',
+    )
     await writeFile(join(sourceDir, 'extra.txt'), 'extra asset')
 
     const target = new CodexTarget()
@@ -102,7 +129,10 @@ describe('target project installs', () => {
     expect(listed).toHaveLength(1)
     expect(listed[0].id).toBe('codex-skill')
 
-    await target.uninstall('source:codex-skill', { scope: 'project', projectPath: projectDir })
+    await target.uninstall('source:codex-skill', {
+      scope: 'project',
+      projectPath: projectDir,
+    })
     expect(existsSync(skillDir)).toBe(false)
   })
 })

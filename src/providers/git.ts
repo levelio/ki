@@ -1,9 +1,10 @@
+import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 // src/providers/git.ts
-import { readdir, readFile, mkdir } from 'fs/promises'
-import { join, dirname } from 'path'
-import { homedir } from 'os'
-import { existsSync } from 'fs'
-import type { Provider, SourceConfig, SkillMeta, SkillContent } from '@/types'
+import { mkdir, readFile, readdir } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
+import type { Provider, SkillContent, SkillMeta, SourceConfig } from '@/types'
 import { computeFileChecksum } from '@/utils'
 
 /**
@@ -42,7 +43,9 @@ import { computeFileChecksum } from '@/utils'
 export class GitProvider implements Provider {
   name = 'git'
 
-  constructor(private readonly cacheDir = join(homedir(), '.config', 'ki', 'cache')) {}
+  constructor(
+    private readonly cacheDir = join(homedir(), '.config', 'ki', 'cache'),
+  ) {}
 
   async discover(config: SourceConfig): Promise<SkillMeta[]> {
     const cachePath = this.getCachePath(config)
@@ -59,9 +62,10 @@ export class GitProvider implements Provider {
     for (const skillsPath of skillsPaths) {
       if (!existsSync(skillsPath)) continue
 
-      const skills = structure === 'flat'
-        ? await this.discoverFlat(config, skillsPath, skillFile)
-        : await this.discoverNested(config, skillsPath, skillFile)
+      const skills =
+        structure === 'flat'
+          ? await this.discoverFlat(config, skillsPath, skillFile)
+          : await this.discoverNested(config, skillsPath, skillFile)
 
       allSkills.push(...skills)
     }
@@ -72,7 +76,10 @@ export class GitProvider implements Provider {
   /**
    * Parse skillsPath option, supporting both string and array formats
    */
-  private getSkillsPaths(options: Record<string, unknown>, cachePath: string): string[] {
+  private getSkillsPaths(
+    options: Record<string, unknown>,
+    cachePath: string,
+  ): string[] {
     const { skillsPath } = options
 
     if (!skillsPath) {
@@ -80,7 +87,7 @@ export class GitProvider implements Provider {
     }
 
     if (Array.isArray(skillsPath)) {
-      return skillsPath.map(p => join(cachePath, p as string))
+      return skillsPath.map((p) => join(cachePath, p as string))
     }
 
     return [join(cachePath, skillsPath as string)]
@@ -110,7 +117,7 @@ export class GitProvider implements Provider {
   private async discoverNested(
     config: SourceConfig,
     skillsPath: string,
-    skillFile: string
+    skillFile: string,
   ): Promise<SkillMeta[]> {
     const skills: SkillMeta[] = []
     const entries = await readdir(skillsPath, { withFileTypes: true })
@@ -143,7 +150,7 @@ export class GitProvider implements Provider {
   private async discoverFlat(
     config: SourceConfig,
     skillsPath: string,
-    skillFile: string
+    skillFile: string,
   ): Promise<SkillMeta[]> {
     const skills: SkillMeta[] = []
     const entries = await readdir(skillsPath, { withFileTypes: true })
@@ -174,7 +181,10 @@ export class GitProvider implements Provider {
     return skills
   }
 
-  private async parseSkillMetadata(filePath: string, fallbackName: string): Promise<Partial<SkillMeta>> {
+  private async parseSkillMetadata(
+    filePath: string,
+    fallbackName: string,
+  ): Promise<Partial<SkillMeta>> {
     const meta: Partial<SkillMeta> = { name: fallbackName }
 
     try {
@@ -232,34 +242,62 @@ export class GitProvider implements Provider {
     }
   }
 
-  private async clone(url: string, path: string, branch: string): Promise<void> {
+  private async clone(
+    url: string,
+    path: string,
+    branch: string,
+  ): Promise<void> {
     await mkdir(this.cacheDir, { recursive: true })
-    await this.runGit(this.cacheDir, 'clone', '--depth', '1', '-b', branch, url, path)
+    await this.runGit(
+      this.cacheDir,
+      'clone',
+      '--depth',
+      '1',
+      '-b',
+      branch,
+      url,
+      path,
+    )
   }
 
   private async removeDir(path: string): Promise<void> {
-    const { rm } = await import('fs/promises')
+    const { rm } = await import('node:fs/promises')
     await rm(path, { recursive: true, force: true })
   }
 
   private async runGit(cwd: string, ...args: string[]): Promise<string> {
-    const result = Bun.spawn(['git', ...args], {
-      cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
+    return new Promise((resolve, reject) => {
+      const child = spawn('git', args, {
+        cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString()
+      })
+
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString()
+      })
+
+      child.on('error', (error) => {
+        reject(error)
+      })
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          reject(
+            new Error(`Git command failed: git ${args.join(' ')}\n${stderr}`),
+          )
+          return
+        }
+
+        resolve(stdout)
+      })
     })
-
-    // Wait for the process to complete
-    await result.exited
-
-    const text = await new Response(result.stdout).text()
-
-    if (result.exitCode !== 0) {
-      const stderr = await new Response(result.stderr).text()
-      throw new Error(`Git command failed: git ${args.join(' ')}\n${stderr}`)
-    }
-
-    return text
   }
 
   private getCacheName(url: string): string {

@@ -26,19 +26,19 @@ description: Use when working with ki CLI to manage skill sources, inspect avail
 ki --help
 
 # 2. 在 ki 仓库内直接运行源码入口
-bun run src/cli.ts --help
+npm run dev -- --help
 
 # 3. 已构建二进制时
-./dist/ki --help
+node ./dist/cli.js --help
 ```
 
 如果 Agent 已经在本仓库内工作，默认优先用：
 
 ```bash
-bun run src/cli.ts
+npm run dev --
 ```
 
-下面示例里的 `ki`，都可以等价替换为 `bun run src/cli.ts`。
+下面示例里的 `ki`，都可以等价替换为 `npm run dev --`。
 
 ## 最常用命令
 
@@ -66,12 +66,41 @@ bun run src/cli.ts
 ### 1. 首次初始化
 
 ```bash
-ki init
-ki status
-ki doctor
+ki init                    # 创建默认配置
+ki source sync ki          # 同步本仓库内置的 ki 源
+ki source skills ki        # 查看本仓库自带技能
+ki install ki:ki-usage -t claude-code -y
+ki list                    # 查看所有可用技能
 ```
 
-### 2. 添加并使用一个 source
+### 安装本仓库自带 skill
+
+`ki init` 生成的默认配置已经内置了当前仓库的 `ki` Git 源：
+
+```yaml
+sources:
+  - name: ki
+    provider: git
+    url: https://github.com/levelio/ki.git
+    enabled: true
+```
+
+推荐安装流程：
+
+```bash
+ki init
+ki source sync ki
+ki source skills ki
+ki install ki:ki-usage -t claude-code -y
+```
+
+如果需要安装到多个目标工具：
+
+```bash
+ki install ki:ki-usage -t claude-code,cursor -y
+```
+
+### 添加其他技能源
 
 ```bash
 ki source add https://github.com/acme/skills.git --name acme
@@ -217,7 +246,23 @@ ki source list
 ki target list
 ```
 
-### 模板 7：更新并验证
+### 安装后如何使用
+
+安装完成后，可以在目标 AI 工具中明确要求使用 `ki-usage` skill 来处理 `ki` 相关问题，例如：
+
+```text
+使用 ki-usage skill，帮我添加一个 Git 技能源，地址是 https://github.com/acme/product-skills.git，源名称叫 acme-skills。
+```
+
+```text
+使用 ki-usage skill，帮我看一下 acme-skills 这个源中都有哪些技能。
+```
+
+```text
+使用 ki-usage skill，帮我把 acme-skills 里的 prd-review 技能安装到 claude-code。
+```
+
+### 多目录源配置
 
 适用：用户要求“更新技能”“同步最新 skill”。
 
@@ -321,4 +366,74 @@ ki update --dry-run
 └── installed.json
 ```
 
-只有在用户明确要求“直接修改配置”时，Agent 才应编辑这些文件。
+## 源配置选项
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `skillsPath` | 技能目录路径，支持数组 | `skills` |
+| `structure` | `nested`（每技能一目录）或 `flat` | `nested` |
+| `skillFile` | 技能文件名 | `SKILL.md` |
+| `branch` | Git 分支 | `main` |
+
+## 技能目录结构
+
+### nested（推荐）
+
+```
+skills/
+├── brainstorming/
+│   └── SKILL.md
+└── debugging/
+    └── SKILL.md
+```
+
+### flat
+
+```
+skills/
+├── brainstorming.md
+└── debugging.md
+```
+
+## 安装选项
+
+```bash
+ki install                          # 交互式多选
+ki install brainstorming            # 搜索后多选
+ki install superpowers:brainstorming -t claude-code -y  # 非交互式安装
+ki install -t claude-code,cursor    # 指定目标
+```
+
+### 非交互式安装
+
+使用 `-y/--yes` 参数跳过交互式确认。稳定路径是同时指定 skill ID 和目标：
+
+```bash
+ki install superpowers:brainstorming -t claude-code -y
+```
+
+## 常见错误
+
+| 错误 | 原因 | 解决 |
+|------|------|------|
+| 技能列表为空 | 源未同步 | `ki source sync` |
+| 找不到源 | 配置错误 | 检查 `~/.config/ki/config.yaml` |
+| 安装失败 | 目标名称无效或目标工具不可用 | 检查 `targets` 配置和目标工具环境 |
+| Git 同步失败 | 网络或权限问题 | 检查 URL 和访问权限 |
+
+## 项目作用域说明
+
+- `ki install --project`、`ki update --project`、`ki uninstall --project` 都以当前工作目录作为项目根目录，请在目标项目目录内执行这些命令。
+
+## SKILL.md 格式
+
+```markdown
+---
+name: 技能名称
+description: 技能描述
+---
+
+# 技能标题
+
+技能内容...
+```

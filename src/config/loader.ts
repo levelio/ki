@@ -1,15 +1,15 @@
-// src/config/loader.ts
-import { parse, stringify } from 'yaml'
-import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { homedir } from 'os'
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Config, TargetConfig } from '@/types'
 import { DEFAULT_CONFIG } from '@/types'
 import type { SourceConfig } from '@/types'
+// src/config/loader.ts
+import { parse, stringify } from 'yaml'
 
-const CONFIG_DIR = join(homedir(), '.config', 'ki')
-const CONFIG_FILE = join(CONFIG_DIR, 'config.yaml')
+export const CONFIG_DIR = join(homedir(), '.config', 'ki')
+export const CONFIG_FILE = join(CONFIG_DIR, 'config.yaml')
 
 export interface ConfigOverride {
   sources?: Partial<SourceConfig>[]
@@ -18,7 +18,11 @@ export interface ConfigOverride {
 
 export async function loadConfig(): Promise<Config> {
   // Start with default config
-  let config = { ...DEFAULT_CONFIG, sources: [...DEFAULT_CONFIG.sources], targets: [...DEFAULT_CONFIG.targets] }
+  let config = {
+    ...DEFAULT_CONFIG,
+    sources: [...DEFAULT_CONFIG.sources],
+    targets: [...DEFAULT_CONFIG.targets],
+  }
 
   // Try to load user config
   if (existsSync(CONFIG_FILE)) {
@@ -56,7 +60,7 @@ export function mergeConfig(defaults: Config, user: ConfigOverride): Config {
 
 function hasStringKey<T extends { name: string }>(
   item: Partial<T>,
-  key: keyof T
+  key: keyof T,
 ): item is Partial<T> & Pick<T, typeof key> {
   return typeof item[key] === 'string' && item[key] !== ''
 }
@@ -64,17 +68,16 @@ function hasStringKey<T extends { name: string }>(
 export function mergeArrays<T extends { name: string }>(
   defaults: T[],
   user: Partial<T>[],
-  key: keyof T
+  key: keyof T,
 ): T[] {
   const result = [...defaults]
-  const userMap = new Map(
-    user
-      .filter((item): item is Partial<T> & Pick<T, typeof key> => hasStringKey(item, key))
-      .map(item => [item[key], item])
+  const validUserItems = user.filter(
+    (item): item is Partial<T> & Pick<T, typeof key> => hasStringKey(item, key),
   )
+  const userMap = new Map(validUserItems.map((item) => [item[key], item]))
 
   for (const [name, userItem] of userMap) {
-    const defaultIndex = result.findIndex(item => item[key] === name)
+    const defaultIndex = result.findIndex((item) => item[key] === name)
 
     if (defaultIndex >= 0) {
       // Merge with default

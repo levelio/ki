@@ -1,82 +1,69 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { pathToFileURL } from 'node:url'
+import * as commands from './commands'
 import { loadConfig } from './config'
-import type { CliFlags } from './types'
-import {
-  runDoctor,
-  initConfig,
-  installSkill,
-  listSkills,
-  searchSkills,
-  showStatus,
-  sourceAdd,
-  sourceDisable,
-  sourceEnable,
-  sourceList,
-  sourceRemove,
-  sourceSkills,
-  sourceSync,
-  targetList,
-  uninstallSkill,
-  updateSkills,
-} from './commands'
+import type { CliFlags, Config } from './types'
+import { formatCliVersion, readPackageVersion } from './version'
 
-export const VERSION = '0.1.4'
+type CommandModule = typeof commands
 
-type CommandModule = {
-  runDoctor: typeof runDoctor
-  initConfig: typeof initConfig
-  installSkill: typeof installSkill
-  listSkills: typeof listSkills
-  searchSkills: typeof searchSkills
-  showStatus: typeof showStatus
-  sourceAdd: typeof sourceAdd
-  sourceDisable: typeof sourceDisable
-  sourceEnable: typeof sourceEnable
-  sourceList: typeof sourceList
-  sourceRemove: typeof sourceRemove
-  sourceSkills: typeof sourceSkills
-  sourceSync: typeof sourceSync
-  targetList: typeof targetList
-  uninstallSkill: typeof uninstallSkill
-  updateSkills: typeof updateSkills
-}
-
-type CliDeps = {
-  loadConfig: typeof loadConfig
+export interface CliDeps {
+  loadConfig: () => Promise<Config>
   commands: CommandModule
-  log: typeof console.log
-  error: typeof console.error
+  log: (message: string) => void
+  error: (message: string) => void
   exit: (code: number) => void
 }
 
+const defaultDeps: CliDeps = {
+  loadConfig,
+  commands,
+  log: console.log,
+  error: console.error,
+  exit: process.exit,
+}
+
+export const VERSION = readPackageVersion()
+
 export function parseFlags(args: string[]): CliFlags {
   const result: CliFlags = { _: [] }
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
+
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]
+
     if (arg.startsWith('--')) {
       const key = arg.slice(2)
-      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
-        result[key] = args[++i]
+      const next = args[index + 1]
+      if (next && !next.startsWith('-')) {
+        result[key] = next
+        index++
       } else {
         result[key] = true
       }
-    } else if (arg.startsWith('-') && arg.length === 2) {
-      const key = arg.slice(1)
-      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
-        result[key] = args[++i]
-      } else {
-        result[key] = true
-      }
-    } else {
-      result._!.push(arg)
+      continue
     }
+
+    if (arg.startsWith('-') && arg.length === 2) {
+      const key = arg.slice(1)
+      const next = args[index + 1]
+      if (next && !next.startsWith('-')) {
+        result[key] = next
+        index++
+      } else {
+        result[key] = true
+      }
+      continue
+    }
+
+    result._?.push(arg)
   }
+
   return result
 }
 
-export function showHelp(log: typeof console.log = console.log) {
+function showHelp(log: CliDeps['log']): void {
   log(`
-ki v${VERSION} - Cross-tool Skill Manager
+${formatCliVersion()} - Cross-tool Skill Manager
 
 Usage:
   ki <command> [options]
@@ -87,20 +74,20 @@ Commands:
   doctor                Check config and installed skill health
   list, ls              List all available skills
   search <query>        Search skills by name or id
-  install [search]      Install skill(s) - interactive multi-select
-  uninstall [search]    Uninstall skill(s) - interactive multi-select
-  update                Update all installed skills
+  install [search]      Install skill(s)
+  uninstall [search]    Uninstall skill(s)
+  update                Update installed skills
   source <cmd>          Manage sources
   target <cmd>          Manage targets
 
 Source Commands:
   ki source add <git-url-or-path> [--name <name>]  Add a git or local source
-  ki source remove <name>      Remove a source
-  ki source list           List all sources
-  ki source sync [name]    Sync all sources or a specific source
-  ki source skills [name]  List skills in a specific source
-  ki source enable <name>  Enable a source
-  ki source disable <name> Disable a source
+  ki source remove <name>                          Remove a source
+  ki source list                                   List all sources
+  ki source sync [name]                            Sync all sources or a specific source
+  ki source skills [name]                          List skills in a specific source
+  ki source enable <name>                          Enable a source
+  ki source disable <name>                         Disable a source
 
 Target Commands:
   ki target list     List all targets
@@ -108,197 +95,189 @@ Target Commands:
 Options:
   --installed           Filter installed skills only
   --source <name>       Filter by source
-  --global              Install or update global skills only
-  --project             Install or update current project skills only
+  --global              Use global installs only
+  --project             Use current project installs only
   --dry-run             Preview changes without writing
   -t, --target <list>   Comma-separated target list
-  -y, --yes             Skip interactive prompts (non-interactive mode)
+  -y, --yes             Skip interactive prompts
   --version, -v         Show version
   --help, -h            Show this help
-
-Examples:
-  ki init                        Initialize config file
-  ki status                      Show current sources, targets, and installs
-  ki doctor                      Check config and installed skill health
-  ki list                        List all skills
-  ki search brainstorming        Search skills by query
-  ki list --installed            List installed skills
-  ki install                     Interactive install
-  ki install brainstorming --dry-run  Preview install targets and location
-  ki install brainstorming       Search + install
-  ki install brainstorming --project  Install to current project
-  ki install superpowers:brainstorming -t claude-code -y  Direct install (non-interactive)
-  ki uninstall                   Interactive multi-select
-  ki uninstall superpowers:brainstorming -y  Direct uninstall (non-interactive)
-  ki uninstall superpowers:brainstorming -t claude-code -y  Uninstall from specific target
-  ki update                      Update all installed skills
-  ki update --dry-run            Preview pending updates
-  ki update --project            Update current project installs only
-  ki source add https://github.com/acme/skills.git --name acme
-  ki source add ./skills --name local-skills
-  ki source remove skills
-  ki source sync                 Sync all sources
 `)
 }
 
-export async function run(args: string[], overrides: Partial<CliDeps> = {}) {
-  const commands: CommandModule = overrides.commands || {
-    runDoctor,
-    initConfig,
-    installSkill,
-    listSkills,
-    searchSkills,
-    showStatus,
-    sourceAdd,
-    sourceDisable,
-    sourceEnable,
-    sourceList,
-    sourceRemove,
-    sourceSkills,
-    sourceSync,
-    targetList,
-    uninstallSkill,
-    updateSkills,
-  }
-  const loadConfigFn = overrides.loadConfig || loadConfig
-  const log = overrides.log || console.log
-  const error = overrides.error || console.error
-  const exit = overrides.exit || process.exit
+function getPositionals(flags: CliFlags): string[] {
+  return flags._ ?? []
+}
 
-  // Version flag
+export async function run(
+  args: string[],
+  overrides: Partial<CliDeps> = {},
+): Promise<void> {
+  const deps: CliDeps = { ...defaultDeps, ...overrides }
+
   if (args.includes('--version') || args.includes('-v')) {
-    log(`ki v${VERSION}`)
-    exit(0)
+    deps.log(formatCliVersion())
+    deps.exit(0)
     return
   }
 
-  // Help flag
-  if (args.includes('--help') || args.includes('-h') || args.length === 0) {
-    showHelp(log)
-    exit(0)
+  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+    showHelp(deps.log)
+    deps.exit(0)
     return
   }
 
-  // Load config
-  const config = await loadConfigFn()
+  const config = await deps.loadConfig()
   const command = args[0]
   const flags = parseFlags(args.slice(1))
-  const positionals = flags._ ?? []
+  const positionals = getPositionals(flags)
 
-  // Route commands
   switch (command) {
     case 'init':
-      await commands.initConfig()
-      break
+      await deps.commands.initConfig()
+      return
 
     case 'list':
     case 'ls':
-      await commands.listSkills(config, flags)
-      break
+      await deps.commands.listSkills(config, flags)
+      return
 
     case 'search':
-      await commands.searchSkills(config, {
-        ...flags,
-        _: positionals.length > 0 ? positionals : flags._,
-      })
-      break
+      await deps.commands.searchSkills(config, flags)
+      return
 
     case 'status':
-      await commands.showStatus(config)
-      break
+      await deps.commands.showStatus(config)
+      return
 
     case 'doctor':
-      await commands.runDoctor(config)
-      break
+      await deps.commands.runDoctor(config)
+      return
 
     case 'install':
-      await commands.installSkill(config, flags)
-      break
+      await deps.commands.installSkill(config, flags)
+      return
 
     case 'uninstall':
     case 'remove':
-      await commands.uninstallSkill(flags)
-      break
+      await deps.commands.uninstallSkill(flags)
+      return
 
     case 'update':
-      await commands.updateSkills(config, flags)
-      break
+      await deps.commands.updateSkills(config, flags)
+      return
 
-    case 'source':
-      const sourceCmd = positionals[0]
-      if (sourceCmd === 'add') {
-        const sourceUrl = positionals[1]
-        if (!sourceUrl) {
-          error('Please specify a git source URL or local directory path')
-          exit(1)
+    case 'source': {
+      const sourceCommand = positionals[0]
+
+      switch (sourceCommand) {
+        case 'add': {
+          const sourceUrl = positionals[1]
+          const explicitName =
+            typeof flags.name === 'string' ? flags.name : undefined
+
+          if (!sourceUrl) {
+            deps.error(
+              'Please specify a git source URL or local directory path',
+            )
+            deps.exit(1)
+            return
+          }
+
+          await deps.commands.sourceAdd(config, sourceUrl, explicitName)
           return
         }
-        const explicitName = typeof flags.name === 'string' ? flags.name : undefined
-        await commands.sourceAdd(config, sourceUrl, explicitName)
-      } else if (sourceCmd === 'remove') {
-        const sourceName = positionals[1]
-        if (!sourceName) {
-          error('Please specify a source name')
-          exit(1)
+
+        case 'remove': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          await deps.commands.sourceRemove(config, sourceName)
           return
         }
-        await commands.sourceRemove(config, sourceName)
-      } else if (sourceCmd === 'list' || sourceCmd === 'ls') {
-        await commands.sourceList(config)
-      } else if (sourceCmd === 'sync') {
-        await commands.sourceSync(config, positionals[1])
-      } else if (sourceCmd === 'skills') {
-        await commands.sourceSkills(config, positionals[1], flags)
-      } else if (sourceCmd === 'enable') {
-        const sourceName = positionals[1]
-        if (!sourceName) {
-          error('Please specify a source name')
-          exit(1)
+
+        case 'list':
+        case 'ls':
+          await deps.commands.sourceList(config)
+          return
+
+        case 'sync':
+          await deps.commands.sourceSync(config, positionals[1])
+          return
+
+        case 'skills':
+          await deps.commands.sourceSkills(config, positionals[1], flags)
+          return
+
+        case 'enable': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          await deps.commands.sourceEnable(config, sourceName)
           return
         }
-        await commands.sourceEnable(config, sourceName)
-      } else if (sourceCmd === 'disable') {
-        const sourceName = positionals[1]
-        if (!sourceName) {
-          error('Please specify a source name')
-          exit(1)
+
+        case 'disable': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          await deps.commands.sourceDisable(config, sourceName)
           return
         }
-        await commands.sourceDisable(config, sourceName)
-      } else {
-        log(`
+
+        default:
+          deps.log(`
 Source commands:
   ki source add <git-url-or-path> [--name <name>]  Add a git or local source
   ki source remove <name>       Remove a source
-  ki source list             List all sources
-  ki source sync [name]      Sync all sources or a specific source
-  ki source skills [name]    List skills in a specific source
-  ki source enable <name>    Enable a source
-  ki source disable <name>   Disable a source
+  ki source list                List all sources
+  ki source sync [name]         Sync all sources or a specific source
+  ki source skills [name]       List skills in a specific source
+  ki source enable <name>       Enable a source
+  ki source disable <name>      Disable a source
 `)
+          return
       }
-      break
+    }
 
-    case 'target':
-      const targetCmd = positionals[0]
-      if (targetCmd === 'list' || targetCmd === 'ls') {
-        await commands.targetList(config)
-      } else {
-        log(`
+    case 'target': {
+      const targetCommand = positionals[0]
+
+      if (targetCommand === 'list' || targetCommand === 'ls') {
+        await deps.commands.targetList(config)
+        return
+      }
+
+      deps.log(`
 Target commands:
   ki target list     List all targets
 `)
-      }
-      break
+      return
+    }
 
     default:
-      error(`Unknown command: ${command}`)
-      showHelp(log)
-      exit(1)
-      return
+      deps.error(`Unknown command: ${command}`)
+      showHelp(deps.log)
+      deps.exit(1)
   }
 }
 
-if (import.meta.main) {
-  run(process.argv.slice(2)).catch(console.error)
+const entrypoint = process.argv[1]
+if (entrypoint && import.meta.url === pathToFileURL(entrypoint).href) {
+  run(process.argv.slice(2)).catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
 }

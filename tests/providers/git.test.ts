@@ -1,13 +1,11 @@
-import { afterAll, afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
-import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
-import { tmpdir } from 'os'
-import { dirname, join } from 'path'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 
 const tempDirs: string[] = []
 const tempCacheDir = await mkdtemp(join(tmpdir(), 'ki-git-cache-'))
 tempDirs.push(tempCacheDir)
-
-const { GitProvider } = await import('../../src/providers/git')
 
 function getCacheName(url: string): string {
   return url
@@ -26,26 +24,25 @@ async function makeSkillFile(path: string, content: string): Promise<void> {
   await writeFile(path, content)
 }
 
-function createSpawnResult(exitCode: number, stdout = '', stderr = '') {
-  return {
-    exited: Promise.resolve(exitCode),
-    exitCode,
-    stdout,
-    stderr,
-  } as unknown as ReturnType<typeof Bun.spawn>
+async function createProvider() {
+  const { GitProvider } = await import('../../src/providers/git')
+  return new GitProvider(tempCacheDir)
 }
 
 afterEach(() => {
-  mock.restore()
+  vi.restoreAllMocks()
+  vi.clearAllMocks()
 })
 
 afterAll(async () => {
-  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  )
 })
 
 describe('GitProvider', () => {
   it('discovers nested skills from the default cache skills directory', async () => {
-    const provider = new GitProvider(tempCacheDir)
+    const provider = await createProvider()
     const config = {
       name: 'remote',
       provider: 'git',
@@ -63,7 +60,7 @@ description: Generate ideas
 ---
 
 # Brainstorming
-`
+`,
     )
 
     const skills = await provider.discover(config)
@@ -83,7 +80,7 @@ description: Generate ideas
   })
 
   it('discovers flat skills and falls back to heading metadata', async () => {
-    const provider = new GitProvider(tempCacheDir)
+    const provider = await createProvider()
     const config = {
       name: 'docs',
       provider: 'git',
@@ -101,7 +98,7 @@ description: Generate ideas
       `# Debugging
 
 Find and isolate failures quickly.
-`
+`,
     )
 
     const skills = await provider.discover(config)
@@ -121,7 +118,7 @@ Find and isolate failures quickly.
   })
 
   it('merges skills discovered from multiple configured skillsPath directories', async () => {
-    const provider = new GitProvider(tempCacheDir)
+    const provider = await createProvider()
     const config = {
       name: 'openai',
       provider: 'git',
@@ -132,8 +129,18 @@ Find and isolate failures quickly.
       },
     } as const
 
-    const curatedDir = join(getCachePath(config.url), 'skills', '.curated', 'writing')
-    const systemDir = join(getCachePath(config.url), 'skills', '.system', 'review')
+    const curatedDir = join(
+      getCachePath(config.url),
+      'skills',
+      '.curated',
+      'writing',
+    )
+    const systemDir = join(
+      getCachePath(config.url),
+      'skills',
+      '.system',
+      'review',
+    )
 
     await mkdir(curatedDir, { recursive: true })
     await mkdir(systemDir, { recursive: true })
@@ -143,7 +150,7 @@ Find and isolate failures quickly.
 name: Writing
 description: Draft content
 ---
-`
+`,
     )
     await writeFile(
       join(systemDir, 'SKILL.md'),
@@ -151,19 +158,26 @@ description: Draft content
 name: Review
 description: Inspect changes
 ---
-`
+`,
     )
 
     const skills = await provider.discover(config)
 
     expect(skills).toHaveLength(2)
-    expect(skills.map(skill => skill.id)).toEqual(['openai:writing', 'openai:review'])
-    expect(skills.map(skill => skill.name)).toEqual(['Writing', 'Review'])
+    expect(skills.map((skill) => skill.id)).toEqual([
+      'openai:writing',
+      'openai:review',
+    ])
+    expect(skills.map((skill) => skill.name)).toEqual(['Writing', 'Review'])
   })
 
   it('fetches skill content with checksum and source paths', async () => {
-    const provider = new GitProvider(tempCacheDir)
-    const skillDir = join(getCachePath('https://github.com/acme/content.git'), 'skills', 'review')
+    const provider = await createProvider()
+    const skillDir = join(
+      getCachePath('https://github.com/acme/content.git'),
+      'skills',
+      'review',
+    )
     const skillFile = join(skillDir, 'SKILL.md')
     await mkdir(skillDir, { recursive: true })
     await writeFile(skillFile, '# Review\n\nInspect carefully.')
@@ -183,8 +197,10 @@ description: Inspect changes
   })
 
   it('clones into the cache when sync runs for an uncached source', async () => {
-    const provider = new GitProvider(tempCacheDir)
-    const spawn = spyOn(Bun, 'spawn').mockReturnValue(createSpawnResult(0))
+    const provider = await createProvider()
+    const runGit = vi
+      .spyOn(provider as never, 'runGit' as never)
+      .mockResolvedValue('')
     const config = {
       name: 'remote',
       provider: 'git',
@@ -197,9 +213,9 @@ description: Inspect changes
 
     await provider.sync(config)
 
-    expect(spawn).toHaveBeenCalledTimes(1)
-    expect(spawn.mock.calls[0]?.[0]).toEqual([
-      'git',
+    expect(runGit).toHaveBeenCalledTimes(1)
+    expect(runGit.mock.calls[0]).toEqual([
+      tempCacheDir,
       'clone',
       '--depth',
       '1',
@@ -208,15 +224,10 @@ description: Inspect changes
       'https://github.com/acme/clone-only.git',
       getCachePath(config.url),
     ])
-    expect(spawn.mock.calls[0]?.[1]).toMatchObject({
-      cwd: tempCacheDir,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
   })
 
   it('fetches and resets an existing cache during sync', async () => {
-    const provider = new GitProvider(tempCacheDir)
+    const provider = await createProvider()
     const config = {
       name: 'remote',
       provider: 'git',
@@ -226,21 +237,24 @@ description: Inspect changes
     const cachePath = getCachePath(config.url)
     await mkdir(cachePath, { recursive: true })
 
-    const spawn = spyOn(Bun, 'spawn')
-      .mockReturnValueOnce(createSpawnResult(0, 'fetched'))
-      .mockReturnValueOnce(createSpawnResult(0, 'reset'))
+    const runGit = vi
+      .spyOn(provider as never, 'runGit' as never)
+      .mockResolvedValue('')
 
     await provider.sync(config)
 
-    expect(spawn).toHaveBeenCalledTimes(2)
-    expect(spawn.mock.calls[0]?.[0]).toEqual(['git', 'fetch'])
-    expect(spawn.mock.calls[0]?.[1]).toMatchObject({ cwd: cachePath })
-    expect(spawn.mock.calls[1]?.[0]).toEqual(['git', 'reset', '--hard', 'origin/main'])
-    expect(spawn.mock.calls[1]?.[1]).toMatchObject({ cwd: cachePath })
+    expect(runGit).toHaveBeenCalledTimes(2)
+    expect(runGit.mock.calls[0]).toEqual([cachePath, 'fetch'])
+    expect(runGit.mock.calls[1]).toEqual([
+      cachePath,
+      'reset',
+      '--hard',
+      'origin/main',
+    ])
   })
 
   it('reclones after a failed cache update during sync', async () => {
-    const provider = new GitProvider(tempCacheDir)
+    const provider = await createProvider()
     const config = {
       name: 'remote',
       provider: 'git',
@@ -251,16 +265,17 @@ description: Inspect changes
     await mkdir(cachePath, { recursive: true })
     await writeFile(join(cachePath, 'stale.txt'), 'stale')
 
-    const spawn = spyOn(Bun, 'spawn')
-      .mockReturnValueOnce(createSpawnResult(1, '', 'fetch failed'))
-      .mockReturnValueOnce(createSpawnResult(0, 'cloned'))
+    const runGit = vi
+      .spyOn(provider as never, 'runGit' as never)
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValue('')
 
     await provider.sync(config)
 
-    expect(spawn).toHaveBeenCalledTimes(2)
-    expect(spawn.mock.calls[0]?.[0]).toEqual(['git', 'fetch'])
-    expect(spawn.mock.calls[1]?.[0]).toEqual([
-      'git',
+    expect(runGit).toHaveBeenCalledTimes(2)
+    expect(runGit.mock.calls[0]).toEqual([cachePath, 'fetch'])
+    expect(runGit.mock.calls[1]).toEqual([
+      tempCacheDir,
       'clone',
       '--depth',
       '1',
@@ -269,8 +284,5 @@ description: Inspect changes
       'https://github.com/acme/broken.git',
       cachePath,
     ])
-    expect(spawn.mock.calls[1]?.[1]).toMatchObject({
-      cwd: tempCacheDir,
-    })
   })
 })

@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
-import * as actualInstalled from '../../src/installed'
+import { mockModule, resetModuleMocks } from 'test-mocks'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const originalLog = console.log
+const mock = vi.fn
 
 function createPromptMocks() {
   return {
@@ -20,7 +21,7 @@ function createSource(name: string, enabled: boolean) {
 }
 
 afterEach(() => {
-  mock.restore()
+  resetModuleMocks()
   console.log = originalLog
 })
 
@@ -33,9 +34,11 @@ describe('status command', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
       loadInstalled: mock(async () => [
         {
           id: 'source:alpha',
@@ -61,10 +64,7 @@ describe('status command', () => {
 
     const { showStatus } = await import('../../src/commands/status')
     await showStatus({
-      sources: [
-        createSource('source', true),
-        createSource('disabled', false),
-      ],
+      sources: [createSource('source', true), createSource('disabled', false)],
       targets: [
         { name: 'codex', enabled: true },
         { name: 'cursor', enabled: true },
@@ -80,7 +80,9 @@ describe('status command', () => {
     expect(consoleLines).toContain('\nGlobal Installations')
     expect(consoleLines).toContain('  ✅ source:alpha (codex @ global)')
     expect(consoleLines).toContain('\nCurrent Project Installations')
-    expect(consoleLines).toContain(`  ✅ source:alpha (cursor @ project:${currentProjectPath})`)
+    expect(consoleLines).toContain(
+      `  ✅ source:alpha (cursor @ project:${currentProjectPath})`,
+    )
     expect(prompts.outro).toHaveBeenCalledWith('Done')
   })
 
@@ -91,9 +93,11 @@ describe('status command', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
       loadInstalled: mock(async () => []),
     }))
 

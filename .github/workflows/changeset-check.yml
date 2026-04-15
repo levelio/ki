@@ -1,0 +1,48 @@
+name: Changeset Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  changeset:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Biome checks
+        run: npm run check
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build package
+        run: npm run build
+
+      - name: Collect changed files
+        id: changed-files
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed-files.txt
+          cat changed-files.txt
+
+      - name: Require changeset when needed
+        run: |
+          if [ -s changed-files.txt ]; then
+            npm run check:changeset -- $(tr '\n' ' ' < changed-files.txt)
+          else
+            echo "No changed files detected."
+          fi

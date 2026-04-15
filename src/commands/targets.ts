@@ -1,6 +1,6 @@
 import * as p from '@clack/prompts'
-import type { Config } from '../types'
 import { targetRegistry } from '../targets'
+import type { Config } from '../types'
 
 export async function targetList(config: Pick<Config, 'targets'>) {
   p.intro('Targets')
@@ -14,7 +14,7 @@ export async function targetList(config: Pick<Config, 'targets'>) {
       try {
         console.log(`     Global: ${target.getGlobalPath()}`)
       } catch {
-        console.log(`     Global: (not supported)`)
+        console.log('     Global: (not supported)')
       }
       console.log(`     Project: ${target.getProjectPath('.')}`)
     }

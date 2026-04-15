@@ -1,5 +1,5 @@
 // src/utils/checksum.ts
-import { createHash } from 'crypto'
+import { createHash } from 'node:crypto'
 
 export function computeChecksum(content: string): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 16)

@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'bun:test'
-import type { InstalledRecord } from '../../../src/installed'
+import { describe, expect, it } from 'vitest'
 import {
   selectInstallSkillIds,
   selectInstallTargets,
   selectUninstallRecords,
   selectUninstallTargets,
 } from '../../../src/commands/skills/select'
+import type { InstalledRecord } from '../../../src/installed'
 
 const globalRecord: InstalledRecord = {
   id: 'source:alpha',
@@ -31,13 +31,13 @@ const projectRecord: InstalledRecord = {
 describe('skill selection helpers', () => {
   it('selects install skill directly in non-interactive exact-match mode', async () => {
     await expect(
-      selectInstallSkillIds([{ id: 'source:alpha' }], true, true)
+      selectInstallSkillIds([{ id: 'source:alpha' }], true, true),
     ).resolves.toEqual(['source:alpha'])
   })
 
   it('selects install targets from explicit flags or enabled targets', async () => {
     await expect(
-      selectInstallTargets([], { t: 'claude-code,codex' }, true)
+      selectInstallTargets([], { t: 'claude-code,codex' }, true),
     ).resolves.toEqual(['claude-code', 'codex'])
 
     await expect(
@@ -48,27 +48,39 @@ describe('skill selection helpers', () => {
           { name: 'cursor', enabled: true },
         ],
         {},
-        true
-      )
+        true,
+      ),
     ).resolves.toEqual(['claude-code', 'cursor'])
   })
 
   it('selects uninstall records only when non-interactive input is unambiguous', async () => {
-    await expect(selectUninstallRecords([globalRecord], true)).resolves.toEqual([globalRecord])
-    await expect(selectUninstallRecords([globalRecord, projectRecord], true)).resolves.toBeNull()
+    await expect(selectUninstallRecords([globalRecord], true)).resolves.toEqual(
+      [globalRecord],
+    )
+    await expect(
+      selectUninstallRecords([globalRecord, projectRecord], true),
+    ).resolves.toBeNull()
   })
 
   it('selects uninstall targets from flags or unique recorded targets', async () => {
     await expect(
-      selectUninstallTargets([globalRecord], { target: 'claude-code,codex' }, true)
+      selectUninstallTargets(
+        [globalRecord],
+        { target: 'claude-code,codex' },
+        true,
+      ),
     ).resolves.toEqual(['claude-code', 'codex'])
 
     await expect(
-      selectUninstallTargets([globalRecord, projectRecord], {}, true)
+      selectUninstallTargets([globalRecord, projectRecord], {}, true),
     ).resolves.toEqual(['claude-code', 'codex', 'cursor'])
 
     await expect(
-      selectUninstallTargets([{ ...projectRecord, targets: ['cursor'] }], {}, false)
+      selectUninstallTargets(
+        [{ ...projectRecord, targets: ['cursor'] }],
+        {},
+        false,
+      ),
     ).resolves.toEqual(['cursor'])
   })
 })

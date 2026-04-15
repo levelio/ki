@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { mergeArrays, mergeConfig } from '../../src/config/loader'
 import { DEFAULT_CONFIG } from '../../src/types'
 
@@ -12,8 +12,8 @@ describe('config loader helpers', () => {
           { name: 'cursor', enabled: true },
           { enabled: true },
         ],
-        'name'
-      )
+        'name',
+      ),
     ).toEqual([
       { name: 'codex', enabled: false },
       { name: 'cursor', enabled: true },
@@ -37,27 +37,33 @@ describe('config loader helpers', () => {
       ],
     })
 
-    expect(merged.sources.find(source => source.name === 'superpowers')).toMatchObject({
+    expect(
+      merged.sources.find((source) => source.name === 'superpowers'),
+    ).toMatchObject({
       name: 'superpowers',
       provider: 'git',
       url: 'https://github.com/obra/superpowers.git',
       enabled: false,
     })
-    expect(merged.sources.find(source => source.name === 'custom')).toEqual({
+    expect(merged.sources.find((source) => source.name === 'custom')).toEqual({
       name: 'custom',
       provider: 'git',
       url: 'https://github.com/acme/custom.git',
       enabled: true,
     })
-    expect(merged.targets.find(target => target.name === 'codex')).toEqual({
+    expect(merged.targets.find((target) => target.name === 'codex')).toEqual({
       name: 'codex',
       enabled: false,
     })
-    expect(merged.targets.find(target => target.name === 'custom-target')).toEqual({
+    expect(
+      merged.targets.find((target) => target.name === 'custom-target'),
+    ).toEqual({
       name: 'custom-target',
       enabled: true,
     })
-    expect(merged.targets.find(target => target.name === 'claude-code')).toEqual({
+    expect(
+      merged.targets.find((target) => target.name === 'claude-code'),
+    ).toEqual({
       name: 'claude-code',
       enabled: true,
     })

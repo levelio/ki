@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
-import { resolve } from 'path'
-import * as actualInstalled from '../../src/installed'
+import { resolve } from 'node:path'
+import { mockModule, resetModuleMocks } from 'test-mocks'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const mock = vi.fn
 
 function createSource(name: string, enabled: boolean) {
   return {
@@ -31,7 +33,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
-  mock.restore()
+  resetModuleMocks()
 })
 
 describe('source commands', () => {
@@ -40,8 +42,8 @@ describe('source commands', () => {
     const syncMock = mock(async () => {})
     const discoverAllMock = mock(async () => [])
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/providers', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/providers', () => ({
       providerRegistry: {
         sync: syncMock,
         discoverAll: discoverAllMock,
@@ -58,27 +60,35 @@ describe('source commands', () => {
     }
 
     await sourceSync(config)
-    expect((syncMock.mock.calls as any[][]).map(call => call[0].name)).toEqual(['alpha', 'gamma'])
+    expect(
+      (syncMock.mock.calls as any[][]).map((call) => call[0].name),
+    ).toEqual(['alpha', 'gamma'])
     expect(discoverAllMock).toHaveBeenCalledTimes(1)
     const discoverCalls = discoverAllMock.mock.calls as any[][]
-    const firstDiscoverCall = discoverCalls[0]!
-    expect(firstDiscoverCall[0].map((source: { name: string }) => source.name)).toEqual(['alpha', 'gamma'])
+    const [firstDiscoverCall] = discoverCalls
+    expect(
+      firstDiscoverCall?.[0].map((source: { name: string }) => source.name),
+    ).toEqual(['alpha', 'gamma'])
 
     syncMock.mockClear()
     discoverAllMock.mockClear()
 
     await sourceSync(config, 'gamma')
-    expect((syncMock.mock.calls as any[][]).map(call => call[0].name)).toEqual(['gamma'])
-    const secondDiscoverCall = (discoverAllMock.mock.calls as any[][])[0]!
-    expect(secondDiscoverCall[0].map((source: { name: string }) => source.name)).toEqual(['gamma'])
+    expect(
+      (syncMock.mock.calls as any[][]).map((call) => call[0].name),
+    ).toEqual(['gamma'])
+    const [secondDiscoverCall] = discoverAllMock.mock.calls as any[][]
+    expect(
+      secondDiscoverCall?.[0].map((source: { name: string }) => source.name),
+    ).toEqual(['gamma'])
   })
 
   it('sourceSync reports missing or disabled named sources', async () => {
     const prompts = createPromptMocks()
     const syncMock = mock(async () => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/providers', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/providers', () => ({
       providerRegistry: {
         sync: syncMock,
         discoverAll: mock(async () => []),
@@ -90,11 +100,13 @@ describe('source commands', () => {
       {
         sources: [createSource('alpha', true)],
       },
-      'missing'
+      'missing',
     )
 
     expect(syncMock).not.toHaveBeenCalled()
-    expect(prompts.log.error).toHaveBeenCalledWith('Source not found or disabled: missing')
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Source not found or disabled: missing',
+    )
   })
 
   it('sourceSkills renders installed status using installed records', async () => {
@@ -105,17 +117,29 @@ describe('source commands', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/providers', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/providers', () => ({
       providerRegistry: {
         discoverAll: mock(async () => [
-          { id: 'alpha:brainstorming', name: 'Brainstorming', _source: 'alpha', _path: '/tmp/a' },
-          { id: 'alpha:debugging', name: 'Debugging', _source: 'alpha', _path: '/tmp/b' },
+          {
+            id: 'alpha:brainstorming',
+            name: 'Brainstorming',
+            _source: 'alpha',
+            _path: '/tmp/a',
+          },
+          {
+            id: 'alpha:debugging',
+            name: 'Debugging',
+            _source: 'alpha',
+            _path: '/tmp/b',
+          },
         ]),
       },
     }))
-    mock.module('../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
       loadInstalled: mock(async () => [
         {
           id: 'alpha:brainstorming',
@@ -135,13 +159,15 @@ describe('source commands', () => {
         sources: [createSource('alpha', true)],
       },
       'alpha',
-      {}
+      {},
     )
 
     console.log = originalLog
 
     expect(consoleLines).toContain('\n  alpha (2)')
-    expect(consoleLines).toContain('    ✅ alpha:brainstorming (claude-code @ global)')
+    expect(consoleLines).toContain(
+      '    ✅ alpha:brainstorming (claude-code @ global)',
+    )
     expect(consoleLines).toContain('    ⬜ alpha:debugging')
   })
 
@@ -149,16 +175,16 @@ describe('source commands', () => {
     const prompts = createPromptMocks()
     const saveConfigMock = mock(async (_config: unknown) => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/config', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/config', () => ({
       saveConfig: saveConfigMock,
     }))
 
-    const { sourceEnable, sourceDisable } = await import('../../src/commands/sources')
+    const { sourceEnable, sourceDisable } = await import(
+      '../../src/commands/sources'
+    )
     const config = {
-      sources: [
-        createSource('alpha', false),
-      ],
+      sources: [createSource('alpha', false)],
       targets: [],
     }
 
@@ -179,8 +205,8 @@ describe('source commands', () => {
     const prompts = createPromptMocks()
     const saveConfigMock = mock(async (_config: unknown) => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/config', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/config', () => ({
       saveConfig: saveConfigMock,
     }))
 
@@ -204,15 +230,17 @@ describe('source commands', () => {
 
     await sourceAdd(config, 'https://github.com/acme/skills.git')
     expect(saveConfigMock).not.toHaveBeenCalled()
-    expect(prompts.log.error).toHaveBeenCalledWith('Source already exists: skills')
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Source already exists: skills',
+    )
   })
 
   it('sourceAdd adds a local source from an existing directory', async () => {
     const prompts = createPromptMocks()
     const saveConfigMock = mock(async (_config: unknown) => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/config', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/config', () => ({
       saveConfig: saveConfigMock,
     }))
 
@@ -238,8 +266,8 @@ describe('source commands', () => {
     const prompts = createPromptMocks()
     const saveConfigMock = mock(async (_config: unknown) => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/config', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/config', () => ({
       saveConfig: saveConfigMock,
     }))
 
@@ -249,12 +277,12 @@ describe('source commands', () => {
         sources: [],
         targets: [],
       },
-      '/tmp/local-skills-that-does-not-exist'
+      '/tmp/local-skills-that-does-not-exist',
     )
 
     expect(saveConfigMock).not.toHaveBeenCalled()
     expect(prompts.log.error).toHaveBeenCalledWith(
-      'Unsupported source. Use a git URL or an existing local directory: /tmp/local-skills-that-does-not-exist'
+      'Unsupported source. Use a git URL or an existing local directory: /tmp/local-skills-that-does-not-exist',
     )
   })
 
@@ -262,17 +290,14 @@ describe('source commands', () => {
     const prompts = createPromptMocks()
     const saveConfigMock = mock(async (_config: unknown) => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/config', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/config', () => ({
       saveConfig: saveConfigMock,
     }))
 
     const { sourceRemove } = await import('../../src/commands/sources')
     const config = {
-      sources: [
-        createSource('alpha', true),
-        createSource('beta', false),
-      ],
+      sources: [createSource('alpha', true), createSource('beta', false)],
       targets: [],
     }
 

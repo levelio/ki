@@ -1,50 +1,62 @@
+import { existsSync, lstatSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import * as p from '@clack/prompts'
-import { existsSync, lstatSync } from 'fs'
-import { homedir } from 'os'
-import { resolve } from 'path'
-import type { CliFlags, Config, SkillMeta, SourceConfig } from '../types'
 import { saveConfig } from '../config'
-import { providerRegistry } from '../providers'
 import {
   filterInstalledRecordsByScope,
   getInstalledRecordsForSkill,
   loadInstalled,
 } from '../installed'
+import { providerRegistry } from '../providers'
+import type { CliFlags, Config, SkillMeta, SourceConfig } from '../types'
 import { printSourceSkillInstallations } from './skills/display'
 
 function getEnabledSources(config: Pick<Config, 'sources'>): SourceConfig[] {
-  return config.sources.filter(source => source.enabled)
+  return config.sources.filter((source) => source.enabled)
 }
 
 function getSelectedEnabledSources(
   config: Pick<Config, 'sources'>,
-  sourceName?: string
+  sourceName?: string,
 ): SourceConfig[] {
   if (!sourceName) {
     return getEnabledSources(config)
   }
 
-  return getEnabledSources(config).filter(source => source.name === sourceName)
+  return getEnabledSources(config).filter(
+    (source) => source.name === sourceName,
+  )
 }
 
-function findSource(config: Pick<Config, 'sources'>, sourceName: string): SourceConfig | undefined {
-  return config.sources.find(source => source.name === sourceName)
+function findSource(
+  config: Pick<Config, 'sources'>,
+  sourceName: string,
+): SourceConfig | undefined {
+  return config.sources.find((source) => source.name === sourceName)
 }
 
 function isGitUrl(value: string): boolean {
-  return value.startsWith('https://') || value.startsWith('http://') || value.startsWith('git@')
+  return (
+    value.startsWith('https://') ||
+    value.startsWith('http://') ||
+    value.startsWith('git@')
+  )
 }
 
 function normalizeLocalPath(value: string): string {
   const withoutScheme = value.replace(/^file:\/\//, '')
-  const expandedHome = withoutScheme === '~'
-    ? homedir()
-    : withoutScheme.replace(/^~(?=\/)/, homedir())
+  const expandedHome =
+    withoutScheme === '~'
+      ? homedir()
+      : withoutScheme.replace(/^~(?=\/)/, homedir())
 
   return resolve(expandedHome)
 }
 
-function detectSource(value: string): Pick<SourceConfig, 'provider' | 'url'> | null {
+function detectSource(
+  value: string,
+): Pick<SourceConfig, 'provider' | 'url'> | null {
   if (isGitUrl(value)) {
     return {
       provider: 'git',
@@ -87,7 +99,10 @@ export async function sourceList(config: Pick<Config, 'sources'>) {
   p.outro(`${config.sources.length} source(s)`)
 }
 
-export async function sourceSync(config: Pick<Config, 'sources'>, sourceName?: string) {
+export async function sourceSync(
+  config: Pick<Config, 'sources'>,
+  sourceName?: string,
+) {
   p.intro('Sync Sources')
 
   const spinner = p.spinner()
@@ -108,11 +123,17 @@ export async function sourceSync(config: Pick<Config, 'sources'>, sourceName?: s
 
   const skills = await providerRegistry.discoverAll(sourcesToSync)
 
-  spinner.stop(`Synced ${sourcesToSync.length} source(s), found ${skills.length} skills`)
+  spinner.stop(
+    `Synced ${sourcesToSync.length} source(s), found ${skills.length} skills`,
+  )
   p.outro('Done')
 }
 
-export async function sourceSkills(config: Pick<Config, 'sources'>, sourceName?: string, flags: CliFlags = { _: [] }) {
+export async function sourceSkills(
+  config: Pick<Config, 'sources'>,
+  sourceName?: string,
+  flags: CliFlags = { _: [] },
+) {
   p.intro(sourceName ? `Skills in ${sourceName}` : 'Skills by Source')
 
   const spinner = p.spinner()
@@ -139,7 +160,11 @@ export async function sourceSkills(config: Pick<Config, 'sources'>, sourceName?:
   }
 
   const currentProjectPath = process.cwd()
-  const installed = filterInstalledRecordsByScope(await loadInstalled(), flags, currentProjectPath)
+  const installed = filterInstalledRecordsByScope(
+    await loadInstalled(),
+    flags,
+    currentProjectPath,
+  )
 
   for (const [source, sourceSkills] of Object.entries(bySource)) {
     if (sourceName && source !== sourceName) continue
@@ -167,10 +192,16 @@ export async function sourceEnable(config: Config, sourceName: string) {
   p.log.success(`Enabled source: ${sourceName}`)
 }
 
-export async function sourceAdd(config: Config, url: string, explicitName?: string) {
+export async function sourceAdd(
+  config: Config,
+  url: string,
+  explicitName?: string,
+) {
   const source = detectSource(url)
   if (!source) {
-    p.log.error(`Unsupported source. Use a git URL or an existing local directory: ${url}`)
+    p.log.error(
+      `Unsupported source. Use a git URL or an existing local directory: ${url}`,
+    )
     return
   }
 
@@ -179,7 +210,7 @@ export async function sourceAdd(config: Config, url: string, explicitName?: stri
     p.log.error(`Source already exists: ${sourceName}`)
     return
   }
-  if (config.sources.some(existing => existing.url === source.url)) {
+  if (config.sources.some((existing) => existing.url === source.url)) {
     p.log.error(`Source URL already exists: ${source.url}`)
     return
   }
@@ -202,7 +233,9 @@ export async function sourceRemove(config: Config, sourceName: string) {
     return
   }
 
-  config.sources = config.sources.filter(existing => existing.name !== sourceName)
+  config.sources = config.sources.filter(
+    (existing) => existing.name !== sourceName,
+  )
   await saveConfig(config)
   p.log.warn(`Removed source: ${sourceName}`)
 }

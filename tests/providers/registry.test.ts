@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ProviderRegistry } from '../../src/providers/registry'
 import type { Provider, SkillMeta, SourceConfig } from '../../src/types'
+
+const mock = vi.fn
 
 const originalWarn = console.warn
 const originalError = console.error
@@ -19,7 +21,7 @@ function createProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     name: 'mock',
     discover: async () => [],
-    fetchSkillContent: async skill => ({
+    fetchSkillContent: async (skill) => ({
       id: skill.id,
       content: '# Skill',
       checksum: 'sha256:1',
@@ -38,14 +40,16 @@ describe('ProviderRegistry', () => {
     const registry = new ProviderRegistry()
     const warn = mock(() => {})
     console.warn = warn as typeof console.warn
-    const discover = mock(async (config: SourceConfig): Promise<SkillMeta[]> => [
-      {
-        id: `${config.name}:alpha`,
-        name: 'Alpha',
-        _source: config.name,
-        _path: `/tmp/${config.name}/SKILL.md`,
-      },
-    ])
+    const discover = mock(
+      async (config: SourceConfig): Promise<SkillMeta[]> => [
+        {
+          id: `${config.name}:alpha`,
+          name: 'Alpha',
+          _source: config.name,
+          _path: `/tmp/${config.name}/SKILL.md`,
+        },
+      ],
+    )
 
     registry.register(createProvider({ discover }))
 
@@ -74,23 +78,27 @@ describe('ProviderRegistry', () => {
     console.warn = warn as typeof console.warn
     console.error = error as typeof console.error
 
-    registry.register(createProvider({
-      name: 'boom',
-      discover: async () => {
-        throw new Error('broken')
-      },
-    }))
-    registry.register(createProvider({
-      name: 'ok',
-      discover: async config => [
-        {
-          id: `${config.name}:beta`,
-          name: 'Beta',
-          _source: config.name,
-          _path: '/tmp/beta/SKILL.md',
+    registry.register(
+      createProvider({
+        name: 'boom',
+        discover: async () => {
+          throw new Error('broken')
         },
-      ],
-    }))
+      }),
+    )
+    registry.register(
+      createProvider({
+        name: 'ok',
+        discover: async (config) => [
+          {
+            id: `${config.name}:beta`,
+            name: 'Beta',
+            _source: config.name,
+            _path: '/tmp/beta/SKILL.md',
+          },
+        ],
+      }),
+    )
 
     const skills = await registry.discoverAll([
       createSource({ name: 'missing', provider: 'missing' }),
@@ -99,8 +107,11 @@ describe('ProviderRegistry', () => {
     ])
 
     expect(warn).toHaveBeenCalledWith('Provider not found: missing')
-    expect(error).toHaveBeenCalledWith('Failed to discover skills from broken:', expect.any(Error))
-    expect(skills.map(skill => skill.id)).toEqual(['healthy:beta'])
+    expect(error).toHaveBeenCalledWith(
+      'Failed to discover skills from broken:',
+      expect.any(Error),
+    )
+    expect(skills.map((skill) => skill.id)).toEqual(['healthy:beta'])
   })
 
   it('fetchContent uses the matching provider and throws for missing providers', async () => {
@@ -121,7 +132,7 @@ describe('ProviderRegistry', () => {
     }
 
     await expect(
-      registry.fetchContent(skill, createSource({ provider: 'mock' }))
+      registry.fetchContent(skill, createSource({ provider: 'mock' })),
     ).resolves.toEqual({
       id: 'source:alpha',
       content: '# Alpha',
@@ -129,7 +140,7 @@ describe('ProviderRegistry', () => {
     })
 
     await expect(
-      registry.fetchContent(skill, createSource({ provider: 'missing' }))
+      registry.fetchContent(skill, createSource({ provider: 'missing' })),
     ).rejects.toThrow('Provider not found: missing')
   })
 

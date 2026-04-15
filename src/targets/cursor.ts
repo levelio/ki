@@ -1,9 +1,22 @@
+import { existsSync, lstatSync, statSync } from 'node:fs'
+import {
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
+import { homedir } from 'node:os'
 // src/targets/cursor.ts
-import { join } from 'path'
-import { homedir } from 'os'
-import { existsSync, lstatSync, statSync } from 'fs'
-import { mkdir, readdir, symlink, unlink, writeFile, rm, rename } from 'fs/promises'
-import type { Target, InstallOptions, SkillContent, InstalledSkill } from '@/types'
+import { join } from 'node:path'
+import type {
+  InstallOptions,
+  InstalledSkill,
+  SkillContent,
+  Target,
+} from '@/types'
 
 import { isWindows } from '@/utils/platform'
 
@@ -19,9 +32,10 @@ export class CursorTarget implements Target {
   }
 
   async install(skill: SkillContent, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     // Each skill is a directory with SKILL.md inside
     const skillName = this.getSkillName(skill.id)
@@ -35,9 +49,10 @@ export class CursorTarget implements Target {
   }
 
   async uninstall(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
     const skillDir = join(basePath, skillName)
@@ -47,10 +62,14 @@ export class CursorTarget implements Target {
     }
   }
 
-  async list(scope: 'global' | 'project', projectPath?: string): Promise<InstalledSkill[]> {
-    const basePath = scope === 'project' && projectPath
-      ? this.getProjectPath(projectPath)
-      : this.getGlobalPath()
+  async list(
+    scope: 'global' | 'project',
+    projectPath?: string,
+  ): Promise<InstalledSkill[]> {
+    const basePath =
+      scope === 'project' && projectPath
+        ? this.getProjectPath(projectPath)
+        : this.getGlobalPath()
 
     if (!existsSync(basePath)) {
       return []
@@ -84,9 +103,10 @@ export class CursorTarget implements Target {
   }
 
   async enable(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
     const disabledDir = join(basePath, `${skillName}.disabled`)
@@ -98,9 +118,10 @@ export class CursorTarget implements Target {
   }
 
   async disable(skillId: string, options?: InstallOptions): Promise<void> {
-    const basePath = options?.scope === 'project' && options.projectPath
-      ? this.getProjectPath(options.projectPath)
-      : this.getGlobalPath()
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
 
     const skillName = this.getSkillName(skillId)
     const enabledDir = join(basePath, skillName)
@@ -142,7 +163,7 @@ ${skill.content}`
   protected async writeFileOrSymlink(
     targetPath: string,
     content: string,
-    sourcePath?: string
+    sourcePath?: string,
   ): Promise<void> {
     // If source path exists and is a file, try to create symlink
     if (sourcePath && existsSync(sourcePath)) {
@@ -163,7 +184,10 @@ ${skill.content}`
   /**
    * Create symlink with cross-platform support
    */
-  protected async createSymlink(sourcePath: string, targetPath: string): Promise<void> {
+  protected async createSymlink(
+    sourcePath: string,
+    targetPath: string,
+  ): Promise<void> {
     // Remove existing file/link first
     if (existsSync(targetPath)) {
       await unlink(targetPath)

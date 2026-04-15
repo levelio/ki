@@ -1,6 +1,11 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  printSkillInstallations,
+  printSourceSkillInstallations,
+} from '../../../src/commands/skills/display'
 import type { InstalledRecord } from '../../../src/installed'
-import { printSkillInstallations, printSourceSkillInstallations } from '../../../src/commands/skills/display'
+
+const mock = vi.fn
 
 const originalLog = console.log
 

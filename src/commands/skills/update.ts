@@ -1,25 +1,36 @@
 import * as p from '@clack/prompts'
-import { providerRegistry } from '../../providers'
-import { targetRegistry } from '../../targets'
-import type { CliFlags, Config } from '../../types'
 import {
   filterInstalledRecordsByScope,
-  formatTargetsAtLocation,
   formatRecordLocation,
+  formatTargetsAtLocation,
   getRecordInstallOptions,
   getRecordKey,
   loadInstalled,
   saveInstalled,
 } from '../../installed'
-import { findSkillSourceConfig, getEnabledSources, getErrorMessage } from './shared'
+import { providerRegistry } from '../../providers'
+import { targetRegistry } from '../../targets'
+import type { CliFlags, Config } from '../../types'
+import {
+  findSkillSourceConfig,
+  getEnabledSources,
+  getErrorMessage,
+} from './shared'
 
-export async function updateSkills(config: Pick<Config, 'sources'>, flags: CliFlags) {
+export async function updateSkills(
+  config: Pick<Config, 'sources'>,
+  flags: CliFlags,
+) {
   p.intro('Update Skills')
   const dryRun = Boolean(flags['dry-run'])
 
   const currentProjectPath = process.cwd()
   const allInstalled = await loadInstalled()
-  const installed = filterInstalledRecordsByScope(allInstalled, flags, currentProjectPath)
+  const installed = filterInstalledRecordsByScope(
+    allInstalled,
+    flags,
+    currentProjectPath,
+  )
   const updatedRecords = new Set<string>()
 
   if (installed.length === 0) {
@@ -41,23 +52,29 @@ export async function updateSkills(config: Pick<Config, 'sources'>, flags: CliFl
   const pendingUpdates: string[] = []
 
   for (const record of installed) {
-    const skill = skills.find(s => s.id === record.id)
+    const skill = skills.find((s) => s.id === record.id)
     if (!skill) continue
 
     const sourceConfig = findSkillSourceConfig(config, skill)
     if (!sourceConfig) {
-      p.log.warn(`Skipped ${record.id} (${formatRecordLocation(record)}): source config not found for ${skill._source}`)
+      p.log.warn(
+        `Skipped ${record.id} (${formatRecordLocation(record)}): source config not found for ${skill._source}`,
+      )
       continue
     }
     const content = await providerRegistry.fetchContent(skill, sourceConfig)
 
     if (content.checksum !== record.checksum) {
       if (dryRun) {
-        pendingUpdates.push(`${record.id} (${formatTargetsAtLocation(record.targets, record)})`)
+        pendingUpdates.push(
+          `${record.id} (${formatTargetsAtLocation(record.targets, record)})`,
+        )
         continue
       }
 
-      spinner.message(`Updating ${record.id} (${formatRecordLocation(record)})...`)
+      spinner.message(
+        `Updating ${record.id} (${formatRecordLocation(record)})...`,
+      )
       let didUpdate = false
       const updatedTargets: string[] = []
 
@@ -72,7 +89,9 @@ export async function updateSkills(config: Pick<Config, 'sources'>, flags: CliFl
           didUpdate = true
           updatedTargets.push(targetName)
         } catch (error) {
-          p.log.warn(`Failed to update ${record.id} (${formatRecordLocation(record)}) for ${targetName}: ${getErrorMessage(error)}`)
+          p.log.warn(
+            `Failed to update ${record.id} (${formatRecordLocation(record)}) for ${targetName}: ${getErrorMessage(error)}`,
+          )
         }
       }
 
@@ -81,7 +100,9 @@ export async function updateSkills(config: Pick<Config, 'sources'>, flags: CliFl
         record.installedAt = new Date().toISOString()
         updatedRecords.add(getRecordKey(record))
         updated = updatedRecords.size
-        p.log.success(`Updated ${record.id} (${formatTargetsAtLocation(updatedTargets, record)})`)
+        p.log.success(
+          `Updated ${record.id} (${formatTargetsAtLocation(updatedTargets, record)})`,
+        )
       }
     }
   }

@@ -1,9 +1,11 @@
 import * as p from '@clack/prompts'
-import type { Config } from '../types'
 import { type InstalledRecord, loadInstalled } from '../installed'
+import type { Config } from '../types'
 import { printSkillInstallations } from './skills/display'
 
-function groupRecordsBySkill(records: InstalledRecord[]): Array<[string, InstalledRecord[]]> {
+function groupRecordsBySkill(
+  records: InstalledRecord[],
+): Array<[string, InstalledRecord[]]> {
   const grouped = new Map<string, InstalledRecord[]>()
 
   for (const record of records) {
@@ -15,10 +17,15 @@ function groupRecordsBySkill(records: InstalledRecord[]): Array<[string, Install
     }
   }
 
-  return [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right))
+  return [...grouped.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  )
 }
 
-function printInstallationSection(title: string, records: InstalledRecord[]): void {
+function printInstallationSection(
+  title: string,
+  records: InstalledRecord[],
+): void {
   console.log(`\n${title}`)
 
   if (records.length === 0) {
@@ -36,20 +43,28 @@ export async function showStatus(config: Pick<Config, 'sources' | 'targets'>) {
 
   const currentProjectPath = process.cwd()
   const installed = await loadInstalled()
-  const enabledSources = config.sources.filter(source => source.enabled)
-  const enabledTargets = config.targets.filter(target => target.enabled)
-  const globalRecords = installed.filter(record => record.scope === 'global')
-  const currentProjectRecords = installed.filter(record =>
-    record.scope === 'project' && record.projectPath === currentProjectPath
+  const enabledSources = config.sources.filter((source) => source.enabled)
+  const enabledTargets = config.targets.filter((target) => target.enabled)
+  const globalRecords = installed.filter((record) => record.scope === 'global')
+  const currentProjectRecords = installed.filter(
+    (record) =>
+      record.scope === 'project' && record.projectPath === currentProjectPath,
   )
 
   console.log('\nOverview')
-  console.log(`  Sources: ${enabledSources.length}/${config.sources.length} enabled`)
-  console.log(`  Targets: ${enabledTargets.length}/${config.targets.length} enabled`)
+  console.log(
+    `  Sources: ${enabledSources.length}/${config.sources.length} enabled`,
+  )
+  console.log(
+    `  Targets: ${enabledTargets.length}/${config.targets.length} enabled`,
+  )
   console.log(`  Current project: ${currentProjectPath}`)
 
   printInstallationSection('Global Installations', globalRecords)
-  printInstallationSection('Current Project Installations', currentProjectRecords)
+  printInstallationSection(
+    'Current Project Installations',
+    currentProjectRecords,
+  )
 
   console.log('')
   p.outro('Done')

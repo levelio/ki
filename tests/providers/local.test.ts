@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from 'bun:test'
-import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import { LocalProvider } from '../../src/providers/local'
 
 const tempDirs: string[] = []
@@ -13,7 +13,9 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  )
 })
 
 describe('LocalProvider', () => {
@@ -29,7 +31,7 @@ description: Generate ideas
 ---
 
 # Brainstorming
-`
+`,
     )
 
     const provider = new LocalProvider()
@@ -63,7 +65,7 @@ description: Generate ideas
       `# Debugging
 
 Find and isolate failures quickly.
-`
+`,
     )
 
     const provider = new LocalProvider()

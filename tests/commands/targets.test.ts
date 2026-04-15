@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
+import { mockModule, resetModuleMocks } from 'test-mocks'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const mock = vi.fn
 
 function createPromptMocks() {
   return {
@@ -8,7 +11,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
-  mock.restore()
+  resetModuleMocks()
 })
 
 describe('target commands', () => {
@@ -20,20 +23,22 @@ describe('target commands', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/targets', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
           if (name === 'claude-code') {
             return {
               getGlobalPath: () => '/global/claude',
-              getProjectPath: (projectPath: string) => `${projectPath}/.claude/skills`,
+              getProjectPath: (projectPath: string) =>
+                `${projectPath}/.claude/skills`,
             }
           }
           if (name === 'codex') {
             return {
               getGlobalPath: () => '/global/codex',
-              getProjectPath: (projectPath: string) => `${projectPath}/.agents/skills`,
+              getProjectPath: (projectPath: string) =>
+                `${projectPath}/.agents/skills`,
             }
           }
           return undefined
@@ -69,14 +74,15 @@ describe('target commands', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../src/targets', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/targets', () => ({
       targetRegistry: {
         get: mock(() => ({
           getGlobalPath: () => {
             throw new Error('not supported')
           },
-          getProjectPath: (projectPath: string) => `${projectPath}/.cursor/skills`,
+          getProjectPath: (projectPath: string) =>
+            `${projectPath}/.cursor/skills`,
         })),
       },
     }))

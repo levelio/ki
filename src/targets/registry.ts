@@ -1,5 +1,5 @@
 // src/targets/registry.ts
-import type { Target, TargetConfig, SkillContent } from '@/types'
+import type { SkillContent, Target, TargetConfig } from '@/types'
 import { ClaudeCodeTarget } from './claude-code'
 import { CodexTarget } from './codex'
 import { CursorTarget } from './cursor'
@@ -32,8 +32,8 @@ export class TargetRegistry {
 
   getEnabled(configs: TargetConfig[]): Target[] {
     return configs
-      .filter(c => c.enabled)
-      .map(c => this.get(c.name))
+      .filter((c) => c.enabled)
+      .map((c) => this.get(c.name))
       .filter((t): t is Target => t !== undefined)
   }
 
@@ -41,32 +41,48 @@ export class TargetRegistry {
     skill: SkillContent,
     enabledConfigs: TargetConfig[],
     scope: 'global' | 'project',
-    projectPath?: string
+    projectPath?: string,
   ): Promise<void> {
     const targets = this.getEnabled(enabledConfigs)
-    const installOptions = scope === 'project'
-      ? { scope, projectPath: projectPath! }
-      : { scope }
+    if (scope === 'project') {
+      if (!projectPath) {
+        throw new Error('projectPath is required for project installs')
+      }
 
-    await Promise.all(targets.map(target =>
-      target.install(skill, installOptions)
-    ))
+      await Promise.all(
+        targets.map((target) =>
+          target.install(skill, { scope: 'project', projectPath }),
+        ),
+      )
+      return
+    }
+
+    await Promise.all(targets.map((target) => target.install(skill, { scope })))
   }
 
   async uninstallFromAll(
     skillId: string,
     enabledConfigs: TargetConfig[],
     scope: 'global' | 'project',
-    projectPath?: string
+    projectPath?: string,
   ): Promise<void> {
     const targets = this.getEnabled(enabledConfigs)
-    const installOptions = scope === 'project'
-      ? { scope, projectPath: projectPath! }
-      : { scope }
+    if (scope === 'project') {
+      if (!projectPath) {
+        throw new Error('projectPath is required for project installs')
+      }
 
-    await Promise.all(targets.map(target =>
-      target.uninstall(skillId, installOptions)
-    ))
+      await Promise.all(
+        targets.map((target) =>
+          target.uninstall(skillId, { scope: 'project', projectPath }),
+        ),
+      )
+      return
+    }
+
+    await Promise.all(
+      targets.map((target) => target.uninstall(skillId, { scope })),
+    )
   }
 }
 

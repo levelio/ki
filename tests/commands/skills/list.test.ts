@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
-import * as actualInstalled from '../../../src/installed'
+import { mockModule, resetModuleMocks } from 'test-mocks'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledRecord } from '../../../src/installed'
+
+const mock = vi.fn
 
 const originalLog = console.log
 
@@ -27,7 +29,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
-  mock.restore()
+  resetModuleMocks()
   console.log = originalLog
 })
 
@@ -71,41 +73,61 @@ describe('skill listing commands', () => {
       },
     ]
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/providers', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         discoverAll: mock(async () => [
-          { id: 'source:alpha', name: 'Alpha', _source: 'source', _path: '/tmp/alpha/SKILL.md' },
-          { id: 'source:beta', name: 'Beta', _source: 'source', _path: '/tmp/beta/SKILL.md' },
-          { id: 'other:alpha', name: 'Alpha Other', _source: 'other', _path: '/tmp/other/SKILL.md' },
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+          {
+            id: 'source:beta',
+            name: 'Beta',
+            _source: 'source',
+            _path: '/tmp/beta/SKILL.md',
+          },
+          {
+            id: 'other:alpha',
+            name: 'Alpha Other',
+            _source: 'other',
+            _path: '/tmp/other/SKILL.md',
+          },
         ]),
       },
     }))
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => installedRecords),
     }))
 
     const { listSkills } = await import('../../../src/commands/skills/list')
     await listSkills(
       {
-        sources: [
-          createSource('source', true),
-          createSource('other', true),
-        ],
+        sources: [createSource('source', true), createSource('other', true)],
       },
       {
         installed: true,
         project: true,
         source: 'source',
         _: ['alpha'],
-      }
+      },
     )
 
     expect(prompts.intro).toHaveBeenCalledWith('Skill List')
-    expect(consoleLines).toContain('  ✅ source:alpha (codex @ project:' + currentProjectPath + ')')
-    expect(consoleLines).toContain('     project:' + currentProjectPath + ' -> codex')
-    expect(consoleLines).not.toContain('  ✅ source:beta (claude-code @ global)')
+    expect(consoleLines).toContain(
+      `  ✅ source:alpha (codex @ project:${currentProjectPath})`,
+    )
+    expect(consoleLines).toContain(
+      `     project:${currentProjectPath} -> codex`,
+    )
+    expect(consoleLines).not.toContain(
+      '  ✅ source:beta (claude-code @ global)',
+    )
     expect(consoleLines).not.toContain('  ✅ other:alpha')
     expect(prompts.note).not.toHaveBeenCalled()
     expect(prompts.outro).toHaveBeenCalledWith('1 skill(s)')
@@ -118,16 +140,23 @@ describe('skill listing commands', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/providers', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         discoverAll: mock(async () => [
-          { id: 'source:alpha', name: 'Alpha', _source: 'source', _path: '/tmp/alpha/SKILL.md' },
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
         ]),
       },
     }))
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => []),
     }))
 
@@ -139,11 +168,13 @@ describe('skill listing commands', () => {
       {
         installed: true,
         _: [],
-      }
+      },
     )
 
     expect(consoleLines).toEqual([])
-    expect(prompts.note).toHaveBeenCalledWith('No skills found matching criteria')
+    expect(prompts.note).toHaveBeenCalledWith(
+      'No skills found matching criteria',
+    )
     expect(prompts.outro).toHaveBeenCalledWith('Done')
   })
 
@@ -154,17 +185,29 @@ describe('skill listing commands', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/providers', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         discoverAll: mock(async () => [
-          { id: 'source:brainstorming', name: 'Brainstorming', _source: 'source', _path: '/tmp/brainstorming/SKILL.md' },
-          { id: 'source:debugging', name: 'Debugging', _source: 'source', _path: '/tmp/debugging/SKILL.md' },
+          {
+            id: 'source:brainstorming',
+            name: 'Brainstorming',
+            _source: 'source',
+            _path: '/tmp/brainstorming/SKILL.md',
+          },
+          {
+            id: 'source:debugging',
+            name: 'Debugging',
+            _source: 'source',
+            _path: '/tmp/debugging/SKILL.md',
+          },
         ]),
       },
     }))
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => []),
     }))
 
@@ -175,7 +218,7 @@ describe('skill listing commands', () => {
       },
       {
         _: ['brain'],
-      }
+      },
     )
 
     expect(prompts.intro).toHaveBeenCalledWith('Search Skills')

@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
-import * as actualInstalled from '../../../src/installed'
+import { mockModule, resetModuleMocks } from 'test-mocks'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledRecord } from '../../../src/installed'
 
 const originalLog = console.log
+const mock = vi.fn
 
 function createSource(name = 'source') {
   return {
@@ -37,7 +38,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
-  mock.restore()
+  resetModuleMocks()
   console.log = originalLog
 })
 
@@ -50,16 +51,23 @@ describe('skill command non-interactive flows', () => {
       throw new Error('boom')
     })
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => []),
       saveInstalled: saveInstalledMock,
     }))
-    mock.module('../../../src/providers', () => ({
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         discoverAll: mock(async () => [
-          { id: 'source:alpha', name: 'Alpha', _source: 'source', _path: '/tmp/alpha/SKILL.md' },
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
         ]),
         fetchContent: mock(async () => ({
           id: 'source:alpha',
@@ -68,7 +76,7 @@ describe('skill command non-interactive flows', () => {
         })),
       },
     }))
-    mock.module('../../../src/targets', () => ({
+    mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
           if (name === 'claude-code') return { install: installSuccess }
@@ -78,7 +86,9 @@ describe('skill command non-interactive flows', () => {
       },
     }))
 
-    const { installSkill } = await import('../../../src/commands/skills/install')
+    const { installSkill } = await import(
+      '../../../src/commands/skills/install'
+    )
     await installSkill(
       {
         sources: [createSource()],
@@ -87,13 +97,15 @@ describe('skill command non-interactive flows', () => {
           { name: 'codex', enabled: true },
         ],
       },
-      { _: ['source:alpha'], y: true, target: 'claude-code,codex' }
+      { _: ['source:alpha'], y: true, target: 'claude-code,codex' },
     )
 
     expect(installSuccess).toHaveBeenCalledTimes(1)
     expect(installFailure).toHaveBeenCalledTimes(1)
     expect(saveInstalledMock).toHaveBeenCalledTimes(1)
-    expect(prompts.log.success).toHaveBeenCalledWith('Installed source:alpha (claude-code @ global)')
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      'Installed source:alpha (claude-code @ global)',
+    )
     expect(saveInstalledMock.mock.calls[0]?.[0]).toEqual([
       {
         id: 'source:alpha',
@@ -105,8 +117,12 @@ describe('skill command non-interactive flows', () => {
         enabled: true,
       },
     ])
-    const installSpinner = prompts.spinner.mock.results[0]?.value as { stop: ReturnType<typeof mock> }
-    expect(installSpinner.stop).toHaveBeenCalledWith('Installed 1 skill instance(s) to 1 target(s) in global')
+    const installSpinner = prompts.spinner.mock.results[0]?.value as {
+      stop: ReturnType<typeof mock>
+    }
+    expect(installSpinner.stop).toHaveBeenCalledWith(
+      'Installed 1 skill instance(s) to 1 target(s) in global',
+    )
     expect(prompts.outro).toHaveBeenCalledWith('Done')
   })
 
@@ -119,20 +135,27 @@ describe('skill command non-interactive flows', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => []),
       saveInstalled: saveInstalledMock,
     }))
-    mock.module('../../../src/providers', () => ({
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         discoverAll: mock(async () => [
-          { id: 'source:alpha', name: 'Alpha', _source: 'source', _path: '/tmp/alpha/SKILL.md' },
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
         ]),
       },
     }))
-    mock.module('../../../src/targets', () => ({
+    mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
           if (name === 'codex') return { install: installMock }
@@ -141,20 +164,26 @@ describe('skill command non-interactive flows', () => {
       },
     }))
 
-    const { installSkill } = await import('../../../src/commands/skills/install')
+    const { installSkill } = await import(
+      '../../../src/commands/skills/install'
+    )
     await installSkill(
       {
         sources: [createSource()],
         targets: [{ name: 'codex', enabled: true }],
       },
-      { _: ['source:alpha'], y: true, target: 'codex', 'dry-run': true }
+      { _: ['source:alpha'], y: true, target: 'codex', 'dry-run': true },
     )
 
     expect(installMock).not.toHaveBeenCalled()
     expect(saveInstalledMock).not.toHaveBeenCalled()
     expect(prompts.spinner).not.toHaveBeenCalled()
-    expect(consoleLines).toContain('  Would install source:alpha (codex @ global)')
-    expect(prompts.outro).toHaveBeenCalledWith('Dry run: 1 skill instance(s) would be installed')
+    expect(consoleLines).toContain(
+      '  Would install source:alpha (codex @ global)',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith(
+      'Dry run: 1 skill instance(s) would be installed',
+    )
   })
 
   it('uninstallSkill removes only selected targets from a matching installation', async () => {
@@ -182,13 +211,15 @@ describe('skill command non-interactive flows', () => {
       },
     ]
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => installedRecords),
       saveInstalled: saveInstalledMock,
     }))
-    mock.module('../../../src/targets', () => ({
+    mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
           if (name === 'claude-code') return { uninstall: uninstallMock }
@@ -197,14 +228,20 @@ describe('skill command non-interactive flows', () => {
       },
     }))
 
-    const { uninstallSkill } = await import('../../../src/commands/skills/uninstall')
-    await uninstallSkill({ _: ['source:alpha'], y: true, target: 'claude-code' })
+    const { uninstallSkill } = await import(
+      '../../../src/commands/skills/uninstall'
+    )
+    await uninstallSkill({
+      _: ['source:alpha'],
+      y: true,
+      target: 'claude-code',
+    })
 
     expect(uninstallMock).toHaveBeenCalledTimes(1)
     const uninstallCalls = uninstallMock.mock.calls as any[][]
-    const uninstallCall = uninstallCalls[0]!
-    expect(uninstallCall[0]).toBe('source:alpha')
-    expect(uninstallCall[1]).toEqual({ scope: 'global' })
+    const [uninstallCall] = uninstallCalls
+    expect(uninstallCall?.[0]).toBe('source:alpha')
+    expect(uninstallCall?.[1]).toEqual({ scope: 'global' })
     expect(saveInstalledMock).toHaveBeenCalledTimes(1)
     expect(saveInstalledMock.mock.calls[0]?.[0]).toEqual([
       {
@@ -241,18 +278,30 @@ describe('skill command non-interactive flows', () => {
       },
     ]
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => installedRecords),
       saveInstalled: saveInstalledMock,
     }))
-    mock.module('../../../src/providers', () => ({
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         sync: syncMock,
         discoverAll: mock(async () => [
-          { id: 'source:alpha', name: 'Alpha', _source: 'source', _path: '/tmp/alpha/SKILL.md' },
-          { id: 'source:beta', name: 'Beta', _source: 'source', _path: '/tmp/beta/SKILL.md' },
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+          {
+            id: 'source:beta',
+            name: 'Beta',
+            _source: 'source',
+            _path: '/tmp/beta/SKILL.md',
+          },
         ]),
         fetchContent: mock(async (skill: { id: string }) => ({
           id: skill.id,
@@ -261,10 +310,11 @@ describe('skill command non-interactive flows', () => {
         })),
       },
     }))
-    mock.module('../../../src/targets', () => ({
+    mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
-          if (name === 'claude-code' || name === 'codex') return { install: installMock }
+          if (name === 'claude-code' || name === 'codex')
+            return { install: installMock }
           return undefined
         }),
       },
@@ -275,13 +325,15 @@ describe('skill command non-interactive flows', () => {
       {
         sources: [createSource()],
       },
-      { global: true, _: [] }
+      { global: true, _: [] },
     )
 
     expect(syncMock).toHaveBeenCalledTimes(1)
     expect(installMock).toHaveBeenCalledTimes(1)
     expect(saveInstalledMock).toHaveBeenCalledTimes(1)
-    expect(prompts.log.success).toHaveBeenCalledWith('Updated source:alpha (claude-code @ global)')
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      'Updated source:alpha (claude-code @ global)',
+    )
     expect(saveInstalledMock.mock.calls[0]?.[0]).toEqual([
       {
         ...installedRecords[0],
@@ -290,8 +342,12 @@ describe('skill command non-interactive flows', () => {
       },
       installedRecords[1],
     ])
-    const spinnerInstance = prompts.spinner.mock.results[0]?.value as { stop: ReturnType<typeof mock> }
-    expect(spinnerInstance.stop).toHaveBeenCalledWith('Updated 1 installation(s)')
+    const spinnerInstance = prompts.spinner.mock.results[0]?.value as {
+      stop: ReturnType<typeof mock>
+    }
+    expect(spinnerInstance.stop).toHaveBeenCalledWith(
+      'Updated 1 installation(s)',
+    )
   })
 
   it('updateSkills respects project scope filtering', async () => {
@@ -332,28 +388,48 @@ describe('skill command non-interactive flows', () => {
       },
     ]
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => installedRecords),
       saveInstalled: saveInstalledMock,
     }))
-    mock.module('../../../src/providers', () => ({
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         sync: syncMock,
         discoverAll: mock(async () => [
-          { id: 'source:alpha', name: 'Alpha', _source: 'source', _path: '/tmp/alpha/SKILL.md' },
-          { id: 'source:beta', name: 'Beta', _source: 'source', _path: '/tmp/beta/SKILL.md' },
-          { id: 'source:gamma', name: 'Gamma', _source: 'source', _path: '/tmp/gamma/SKILL.md' },
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+          {
+            id: 'source:beta',
+            name: 'Beta',
+            _source: 'source',
+            _path: '/tmp/beta/SKILL.md',
+          },
+          {
+            id: 'source:gamma',
+            name: 'Gamma',
+            _source: 'source',
+            _path: '/tmp/gamma/SKILL.md',
+          },
         ]),
         fetchContent: mock(async (skill: { id: string }) => ({
           id: skill.id,
           content: `# ${skill.id}`,
-          checksum: skill.id === 'source:alpha' ? 'sha256:new-current' : 'sha256:unchanged',
+          checksum:
+            skill.id === 'source:alpha'
+              ? 'sha256:new-current'
+              : 'sha256:unchanged',
         })),
       },
     }))
-    mock.module('../../../src/targets', () => ({
+    mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
           if (name === 'claude-code' || name === 'codex' || name === 'cursor') {
@@ -369,7 +445,7 @@ describe('skill command non-interactive flows', () => {
       {
         sources: [createSource()],
       },
-      { project: true, _: [] }
+      { project: true, _: [] },
     )
 
     expect(syncMock).toHaveBeenCalledTimes(1)
@@ -381,7 +457,7 @@ describe('skill command non-interactive flows', () => {
     })
     expect(saveInstalledMock).toHaveBeenCalledTimes(1)
     expect(prompts.log.success).toHaveBeenCalledWith(
-      `Updated source:alpha (claude-code @ project:${currentProjectPath})`
+      `Updated source:alpha (claude-code @ project:${currentProjectPath})`,
     )
     expect(saveInstalledMock.mock.calls[0]?.[0]).toEqual([
       {
@@ -404,9 +480,11 @@ describe('skill command non-interactive flows', () => {
       consoleLines.push(String(line))
     }) as typeof console.log
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => [
         {
           id: 'source:alpha',
@@ -420,11 +498,16 @@ describe('skill command non-interactive flows', () => {
       ]),
       saveInstalled: saveInstalledMock,
     }))
-    mock.module('../../../src/providers', () => ({
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         sync: syncMock,
         discoverAll: mock(async () => [
-          { id: 'source:alpha', name: 'Alpha', _source: 'source', _path: '/tmp/alpha/SKILL.md' },
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
         ]),
         fetchContent: mock(async () => ({
           id: 'source:alpha',
@@ -433,7 +516,7 @@ describe('skill command non-interactive flows', () => {
         })),
       },
     }))
-    mock.module('../../../src/targets', () => ({
+    mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
           if (name === 'codex') return { install: installMock }
@@ -447,15 +530,21 @@ describe('skill command non-interactive flows', () => {
       {
         sources: [createSource()],
       },
-      { global: true, 'dry-run': true, _: [] }
+      { global: true, 'dry-run': true, _: [] },
     )
 
     expect(syncMock).toHaveBeenCalledTimes(1)
     expect(installMock).not.toHaveBeenCalled()
     expect(saveInstalledMock).not.toHaveBeenCalled()
-    const spinnerInstance = prompts.spinner.mock.results[0]?.value as { stop: ReturnType<typeof mock> }
-    expect(spinnerInstance.stop).toHaveBeenCalledWith('Found 1 installation(s) with updates')
-    expect(consoleLines).toContain('  Would update source:alpha (codex @ global)')
+    const spinnerInstance = prompts.spinner.mock.results[0]?.value as {
+      stop: ReturnType<typeof mock>
+    }
+    expect(spinnerInstance.stop).toHaveBeenCalledWith(
+      'Found 1 installation(s) with updates',
+    )
+    expect(consoleLines).toContain(
+      '  Would update source:alpha (codex @ global)',
+    )
     expect(prompts.outro).toHaveBeenCalledWith('Dry run complete')
   })
 
@@ -465,9 +554,11 @@ describe('skill command non-interactive flows', () => {
     const discoverAllMock = mock(async () => [])
     const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('../../../src/installed', () => ({
-      ...actualInstalled,
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
       loadInstalled: mock(async () => [
         {
           id: 'source:alpha',
@@ -482,13 +573,13 @@ describe('skill command non-interactive flows', () => {
       ]),
       saveInstalled: saveInstalledMock,
     }))
-    mock.module('../../../src/providers', () => ({
+    mockModule('../../../src/providers', () => ({
       providerRegistry: {
         sync: syncMock,
         discoverAll: discoverAllMock,
       },
     }))
-    mock.module('../../../src/targets', () => ({
+    mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock(() => undefined),
       },
@@ -499,7 +590,7 @@ describe('skill command non-interactive flows', () => {
       {
         sources: [createSource()],
       },
-      { project: true, _: [] }
+      { project: true, _: [] },
     )
 
     expect(prompts.note).toHaveBeenCalledWith('No matching installed skills')

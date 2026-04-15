@@ -1,6 +1,8 @@
-import { describe, expect, it, mock } from 'bun:test'
-import { parseFlags, run, VERSION } from '../src/cli'
+import { describe, expect, it, vi } from 'vitest'
+import { VERSION, parseFlags, run } from '../src/cli'
 import type { Config } from '../src/types'
+
+const mock = vi.fn
 
 function createCommands() {
   return {
@@ -40,7 +42,9 @@ function createConfig(overrides: Partial<Config> = {}): Config {
 
 describe('cli', () => {
   it('parseFlags parses long flags, short flags, and positional args', () => {
-    expect(parseFlags(['install', '--target', 'codex,cursor', '-y', '--project'])).toEqual({
+    expect(
+      parseFlags(['install', '--target', 'codex,cursor', '-y', '--project']),
+    ).toEqual({
       _: ['install'],
       target: 'codex,cursor',
       y: true,
@@ -53,7 +57,9 @@ describe('cli', () => {
     const log = mock(() => {})
     const error = mock(() => {})
     const exit = mock(() => {})
-    const loadConfig = mock(async () => createConfig({ sources: [], targets: [] }))
+    const loadConfig = mock(async () =>
+      createConfig({ sources: [], targets: [] }),
+    )
 
     await run([], { commands, log, error, exit, loadConfig })
 
@@ -172,7 +178,9 @@ describe('cli', () => {
     const commands = createCommands()
     const error = mock(() => {})
     const exit = mock(() => {})
-    const loadConfig = mock(async () => createConfig({ sources: [], targets: [] }))
+    const loadConfig = mock(async () =>
+      createConfig({ sources: [], targets: [] }),
+    )
 
     await run(['source', 'enable'], {
       commands,
@@ -191,18 +199,21 @@ describe('cli', () => {
     const commands = createCommands()
     const config = createConfig()
 
-    await run(['source', 'add', 'https://github.com/acme/skills.git', '--name', 'acme'], {
-      commands,
-      loadConfig: mock(async () => config),
-      log: mock(() => {}),
-      error: mock(() => {}),
-      exit: mock(() => {}),
-    })
+    await run(
+      ['source', 'add', 'https://github.com/acme/skills.git', '--name', 'acme'],
+      {
+        commands,
+        loadConfig: mock(async () => config),
+        log: mock(() => {}),
+        error: mock(() => {}),
+        exit: mock(() => {}),
+      },
+    )
 
     expect(commands.sourceAdd).toHaveBeenCalledWith(
       config,
       'https://github.com/acme/skills.git',
-      'acme'
+      'acme',
     )
   })
 
@@ -220,7 +231,9 @@ describe('cli', () => {
     })
 
     expect(commands.sourceAdd).not.toHaveBeenCalled()
-    expect(error).toHaveBeenCalledWith('Please specify a git source URL or local directory path')
+    expect(error).toHaveBeenCalledWith(
+      'Please specify a git source URL or local directory path',
+    )
     expect(exit).toHaveBeenCalledWith(1)
   })
 
@@ -251,7 +264,9 @@ describe('cli', () => {
       exit: mock(() => {}),
     })
 
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('Source commands:'))
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Source commands:'),
+    )
     expect(commands.sourceList).not.toHaveBeenCalled()
     expect(commands.sourceSync).not.toHaveBeenCalled()
   })
@@ -283,7 +298,9 @@ describe('cli', () => {
       exit: mock(() => {}),
     })
 
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('Target commands:'))
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Target commands:'),
+    )
     expect(commands.targetList).not.toHaveBeenCalled()
   })
 
@@ -292,7 +309,9 @@ describe('cli', () => {
     const log = mock(() => {})
     const error = mock(() => {})
     const exit = mock(() => {})
-    const loadConfig = mock(async () => createConfig({ sources: [], targets: [] }))
+    const loadConfig = mock(async () =>
+      createConfig({ sources: [], targets: [] }),
+    )
 
     await run(['wat'], {
       commands,

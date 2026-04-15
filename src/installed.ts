@@ -1,8 +1,8 @@
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { CliFlags, InstallOptions } from './types'
-import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { homedir } from 'os'
 
 const DATA_DIR = join(homedir(), '.config', 'ki')
 const INSTALLED_FILE = join(DATA_DIR, 'installed.json')
@@ -28,11 +28,15 @@ export type ProjectInstalledRecord = InstalledRecordBase & {
 
 export type InstalledRecord = GlobalInstalledRecord | ProjectInstalledRecord
 
-export function getRecordKey(record: Pick<InstalledRecord, 'id' | 'scope' | 'projectPath'>): string {
+export function getRecordKey(
+  record: Pick<InstalledRecord, 'id' | 'scope' | 'projectPath'>,
+): string {
   return `${record.id}::${record.scope}::${record.projectPath ?? ''}`
 }
 
-export function formatRecordLocation(record: Pick<InstalledRecord, 'scope' | 'projectPath'>): string {
+export function formatRecordLocation(
+  record: Pick<InstalledRecord, 'scope' | 'projectPath'>,
+): string {
   if (record.scope === 'project') {
     return `project:${record.projectPath}`
   }
@@ -42,23 +46,29 @@ export function formatRecordLocation(record: Pick<InstalledRecord, 'scope' | 'pr
 
 export function formatRecordLabel(record: InstalledRecord): string {
   const location = formatRecordLocation(record)
-  const targets = record.targets.length > 0 ? ` [${record.targets.join(', ')}]` : ''
+  const targets =
+    record.targets.length > 0 ? ` [${record.targets.join(', ')}]` : ''
   return `${record.id} (${location})${targets}`
 }
 
 export function findInstalledRecordIndex(
   records: InstalledRecord[],
-  record: Pick<InstalledRecord, 'id' | 'scope' | 'projectPath'>
+  record: Pick<InstalledRecord, 'id' | 'scope' | 'projectPath'>,
 ): number {
   const key = getRecordKey(record)
-  return records.findIndex(existing => getRecordKey(existing) === key)
+  return records.findIndex((existing) => getRecordKey(existing) === key)
 }
 
-export function getInstalledRecordsForSkill(records: InstalledRecord[], skillId: string): InstalledRecord[] {
-  return records.filter(record => record.id === skillId)
+export function getInstalledRecordsForSkill(
+  records: InstalledRecord[],
+  skillId: string,
+): InstalledRecord[] {
+  return records.filter((record) => record.id === skillId)
 }
 
-export function sortInstalledRecords(records: InstalledRecord[]): InstalledRecord[] {
+export function sortInstalledRecords(
+  records: InstalledRecord[],
+): InstalledRecord[] {
   return [...records].sort((a, b) => {
     if (a.scope !== b.scope) {
       return a.scope === 'global' ? -1 : 1
@@ -69,8 +79,10 @@ export function sortInstalledRecords(records: InstalledRecord[]): InstalledRecor
 }
 
 export function getSkillSummary(records: InstalledRecord[]): string {
-  const entries = records.flatMap(record =>
-    record.targets.map(target => `${target} @ ${formatRecordLocation(record)}`)
+  const entries = records.flatMap((record) =>
+    record.targets.map(
+      (target) => `${target} @ ${formatRecordLocation(record)}`,
+    ),
   )
 
   return entries.join('; ')
@@ -78,7 +90,7 @@ export function getSkillSummary(records: InstalledRecord[]): string {
 
 export function formatTargetsAtLocation(
   targets: string[],
-  record: Pick<InstalledRecord, 'scope' | 'projectPath'>
+  record: Pick<InstalledRecord, 'scope' | 'projectPath'>,
 ): string {
   return `${targets.join(', ')} @ ${formatRecordLocation(record)}`
 }
@@ -86,16 +98,17 @@ export function formatTargetsAtLocation(
 export function filterInstalledRecordsByScope(
   records: InstalledRecord[],
   flags: Pick<CliFlags, 'project' | 'global'>,
-  currentProjectPath: string
+  currentProjectPath: string,
 ): InstalledRecord[] {
-  if (flags['project']) {
-    return records.filter(record =>
-      record.scope === 'project' && record.projectPath === currentProjectPath
+  if (flags.project) {
+    return records.filter(
+      (record) =>
+        record.scope === 'project' && record.projectPath === currentProjectPath,
     )
   }
 
-  if (flags['global']) {
-    return records.filter(record => record.scope === 'global')
+  if (flags.global) {
+    return records.filter((record) => record.scope === 'global')
   }
 
   return records
@@ -103,7 +116,8 @@ export function filterInstalledRecordsByScope(
 
 export function printInstalledRecordDetails(records: InstalledRecord[]): void {
   for (const record of sortInstalledRecords(records)) {
-    const targets = record.targets.length > 0 ? record.targets.join(', ') : '(no targets)'
+    const targets =
+      record.targets.length > 0 ? record.targets.join(', ') : '(no targets)'
     console.log(`     ${formatRecordLocation(record)} -> ${targets}`)
   }
 }
@@ -123,7 +137,9 @@ export async function saveInstalled(records: InstalledRecord[]): Promise<void> {
   await writeFile(INSTALLED_FILE, JSON.stringify(records, null, 2))
 }
 
-export function getRecordInstallOptions(record: InstalledRecord): InstallOptions {
+export function getRecordInstallOptions(
+  record: InstalledRecord,
+): InstallOptions {
   if (record.scope !== 'project') {
     return { scope: record.scope }
   }

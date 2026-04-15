@@ -1,6 +1,4 @@
 import * as p from '@clack/prompts'
-import type { CliFlags } from '../../types'
-import { targetRegistry } from '../../targets'
 import {
   type InstalledRecord,
   filterInstalledRecordsByScope,
@@ -9,11 +7,13 @@ import {
   loadInstalled,
   saveInstalled,
 } from '../../installed'
+import { targetRegistry } from '../../targets'
+import type { CliFlags } from '../../types'
 import { selectUninstallRecords, selectUninstallTargets } from './select'
 
 export async function uninstallSkill(flags: CliFlags) {
   const searchQuery = flags._?.[0]
-  const nonInteractive = Boolean(flags['y'] || flags['yes'])
+  const nonInteractive = Boolean(flags.y || flags.yes)
   const currentProjectPath = process.cwd()
 
   p.intro(searchQuery ? `Uninstall: ${searchQuery}` : 'Uninstall Skill')
@@ -26,14 +26,18 @@ export async function uninstallSkill(flags: CliFlags) {
     return
   }
 
-  let filtered = filterInstalledRecordsByScope(installed, flags, currentProjectPath)
+  let filtered = filterInstalledRecordsByScope(
+    installed,
+    flags,
+    currentProjectPath,
+  )
   if (searchQuery) {
-    const exactMatches = filtered.filter(r => r.id === searchQuery)
+    const exactMatches = filtered.filter((r) => r.id === searchQuery)
     if (exactMatches.length > 0) {
       filtered = exactMatches
     } else {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(r => r.id.toLowerCase().includes(query))
+      filtered = filtered.filter((r) => r.id.toLowerCase().includes(query))
       if (filtered.length === 0) {
         p.log.error(`No installed skills matching: ${searchQuery}`)
         p.outro('Failed')
@@ -44,7 +48,9 @@ export async function uninstallSkill(flags: CliFlags) {
 
   const selectedRecords = await selectUninstallRecords(filtered, nonInteractive)
   if (!selectedRecords && nonInteractive) {
-    p.log.error('Non-interactive uninstall requires exactly one matching installation. Use --global or run from the target project with --project.')
+    p.log.error(
+      'Non-interactive uninstall requires exactly one matching installation. Use --global or run from the target project with --project.',
+    )
     p.outro('Failed')
     return
   }
@@ -53,7 +59,11 @@ export async function uninstallSkill(flags: CliFlags) {
     return
   }
 
-  const targets = await selectUninstallTargets(selectedRecords, flags, nonInteractive)
+  const targets = await selectUninstallTargets(
+    selectedRecords,
+    flags,
+    nonInteractive,
+  )
   if (!targets) {
     p.outro('Cancelled')
     return
@@ -91,19 +101,21 @@ export async function uninstallSkill(flags: CliFlags) {
     }
   }
 
-  const newInstalled = installed.map(r => {
-    const recordKey = getRecordKey(r)
-    const removedTargets = removedTargetsByRecord.get(recordKey)
-    if (!removedTargets || removedTargets.size === 0) {
-      return r
-    }
+  const newInstalled = installed
+    .map((r) => {
+      const recordKey = getRecordKey(r)
+      const removedTargets = removedTargetsByRecord.get(recordKey)
+      if (!removedTargets || removedTargets.size === 0) {
+        return r
+      }
 
-    const remainingTargets = r.targets.filter(t => !removedTargets.has(t))
-    if (remainingTargets.length === 0) {
-      return null
-    }
-    return { ...r, targets: remainingTargets }
-  }).filter(Boolean) as InstalledRecord[]
+      const remainingTargets = r.targets.filter((t) => !removedTargets.has(t))
+      if (remainingTargets.length === 0) {
+        return null
+      }
+      return { ...r, targets: remainingTargets }
+    })
+    .filter(Boolean) as InstalledRecord[]
 
   await saveInstalled(newInstalled)
 

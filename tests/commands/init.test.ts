@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
-import * as actualOs from 'os'
+import { mockModule, resetModuleMocks } from 'test-mocks'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_CONFIG } from '../../src/types'
+
+const mock = vi.fn
 
 function createPromptMocks() {
   return {
@@ -17,7 +19,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
-  mock.restore()
+  resetModuleMocks()
 })
 
 describe('init command', () => {
@@ -25,19 +27,19 @@ describe('init command', () => {
     const prompts = createPromptMocks()
     const saveConfig = mock(async () => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('fs', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('fs', () => ({
       existsSync: () => false,
     }))
-    mock.module('os', () => ({
-      ...actualOs,
+    mockModule('os', async () => ({
+      ...(await vi.importActual<typeof import('os')>('os')),
       homedir: () => '/tmp/test-home',
     }))
-    mock.module('node:os', () => ({
-      ...actualOs,
+    mockModule('node:os', async () => ({
+      ...(await vi.importActual<typeof import('node:os')>('node:os')),
       homedir: () => '/tmp/test-home',
     }))
-    mock.module('../../src/config', () => ({
+    mockModule('../../src/config', () => ({
       saveConfig,
     }))
 
@@ -45,7 +47,9 @@ describe('init command', () => {
     await initConfig()
 
     expect(saveConfig).toHaveBeenCalledWith(DEFAULT_CONFIG)
-    expect(prompts.outro).toHaveBeenCalledWith('Config file created at /tmp/test-home/.config/ki/config.yaml')
+    expect(prompts.outro).toHaveBeenCalledWith(
+      'Config file created at /tmp/test-home/.config/ki/config.yaml',
+    )
   })
 
   it('cancels when a config file exists and overwrite is declined', async () => {
@@ -53,19 +57,19 @@ describe('init command', () => {
     prompts.confirm = mock(async () => false)
     const saveConfig = mock(async () => {})
 
-    mock.module('@clack/prompts', () => prompts)
-    mock.module('fs', () => ({
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('fs', () => ({
       existsSync: () => true,
     }))
-    mock.module('os', () => ({
-      ...actualOs,
+    mockModule('os', async () => ({
+      ...(await vi.importActual<typeof import('os')>('os')),
       homedir: () => '/tmp/test-home',
     }))
-    mock.module('node:os', () => ({
-      ...actualOs,
+    mockModule('node:os', async () => ({
+      ...(await vi.importActual<typeof import('node:os')>('node:os')),
       homedir: () => '/tmp/test-home',
     }))
-    mock.module('../../src/config', () => ({
+    mockModule('../../src/config', () => ({
       saveConfig,
     }))
 
