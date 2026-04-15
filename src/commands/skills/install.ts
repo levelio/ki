@@ -21,10 +21,18 @@ export async function installSkill(
   flags: CliFlags,
 ) {
   const searchQuery = flags._?.[0]
-  const nonInteractive = Boolean(flags.y || flags.yes)
+  const interactive = Boolean(flags.interactive)
   const dryRun = Boolean(flags['dry-run'])
 
   p.intro(searchQuery ? `Install Skill: ${searchQuery}` : 'Install Skill')
+
+  if (interactive && (!process.stdin.isTTY || !process.stdout.isTTY)) {
+    p.log.error(
+      'Interactive mode requires a TTY. Use ki search to find an exact skill id, then run ki install without -i/--interactive.',
+    )
+    p.outro('Failed')
+    return
+  }
 
   const enabledSources = getEnabledSources(config)
   const skills = await providerRegistry.discoverAll(enabledSources)
@@ -36,10 +44,12 @@ export async function installSkill(
   }
 
   let filteredSkills = skills
+  let exactSkillId: string | null = null
   if (searchQuery) {
     const exactMatch = skills.find((s) => s.id === searchQuery)
     if (exactMatch) {
       filteredSkills = [exactMatch]
+      exactSkillId = exactMatch.id
     } else {
       const query = searchQuery.toLowerCase()
       filteredSkills = skills.filter(
@@ -55,23 +65,44 @@ export async function installSkill(
     }
   }
 
-  const skillIds = await selectInstallSkillIds(
-    filteredSkills,
-    nonInteractive,
-    Boolean(flags.t || flags.target),
-  )
+  const skillIds = interactive
+    ? await selectInstallSkillIds(filteredSkills, true)
+    : exactSkillId
+      ? [exactSkillId]
+      : null
   if (!skillIds) {
-    p.outro('Cancelled')
+    if (interactive) {
+      p.outro('Cancelled')
+      return
+    }
+
+    if (searchQuery) {
+      p.log.error(
+        `Non-interactive install requires an exact skill id. Run ki search ${searchQuery} or use ki install ${searchQuery} -i.`,
+      )
+    } else {
+      p.log.error(
+        'Non-interactive install requires an exact skill id. Run ki list, ki search <query>, or use ki install -i.',
+      )
+    }
+    p.outro('Failed')
     return
   }
 
   const targets = await selectInstallTargets(
     config.targets,
     flags,
-    nonInteractive,
+    interactive,
   )
   if (!targets) {
-    p.outro('Cancelled')
+    if (interactive) {
+      p.outro('Cancelled')
+    } else {
+      p.log.error(
+        'Non-interactive install requires an explicit target when multiple enabled targets exist. Use -t/--target, or leave only one enabled target in config.',
+      )
+      p.outro('Failed')
+    }
     return
   }
   if (targets.length === 0) {

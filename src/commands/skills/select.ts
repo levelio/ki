@@ -1,8 +1,6 @@
 import * as p from '@clack/prompts'
 import {
   type InstalledRecord,
-  formatRecordLabel,
-  getRecordKey,
 } from '../../installed'
 import type { CliFlags, TargetConfig } from '../../types'
 
@@ -12,10 +10,12 @@ interface SkillOption {
 
 export async function selectInstallSkillIds(
   skills: SkillOption[],
-  nonInteractive: boolean,
-  hasExplicitTarget: boolean,
+  interactive: boolean,
 ): Promise<string[] | null> {
-  if (nonInteractive && skills.length === 1 && hasExplicitTarget) {
+  if (!interactive) {
+    if (skills.length !== 1) {
+      return null
+    }
     return [skills[0].id]
   }
 
@@ -38,7 +38,7 @@ export async function selectInstallSkillIds(
 export async function selectInstallTargets(
   enabledTargets: TargetConfig[],
   flags: CliFlags,
-  nonInteractive: boolean,
+  interactive: boolean,
 ): Promise<string[] | null> {
   const explicitTargets =
     typeof flags.t === 'string'
@@ -51,20 +51,23 @@ export async function selectInstallTargets(
     return explicitTargets.split(',').map((target) => target.trim())
   }
 
-  if (nonInteractive) {
-    return enabledTargets
-      .filter((target) => target.enabled)
-      .map((target) => target.name)
+  const availableTargets = enabledTargets
+    .filter((target) => target.enabled)
+    .map((target) => target.name)
+
+  if (!interactive) {
+    if (availableTargets.length <= 1) {
+      return availableTargets
+    }
+    return null
   }
 
   const selected = await p.autocompleteMultiselect({
     message: 'Select targets (type to search)',
-    options: enabledTargets
-      .filter((target) => target.enabled)
-      .map((target) => ({
-        value: target.name,
-        label: target.name,
-      })),
+    options: availableTargets.map((targetName) => ({
+      value: targetName,
+      label: targetName,
+    })),
     required: true,
   })
 
@@ -77,37 +80,16 @@ export async function selectInstallTargets(
 
 export async function selectUninstallRecords(
   records: InstalledRecord[],
-  nonInteractive: boolean,
 ): Promise<InstalledRecord[] | null> {
-  if (nonInteractive && records.length === 1) {
+  if (records.length === 1) {
     return [records[0]]
   }
-
-  if (nonInteractive) {
-    return null
-  }
-
-  const selected = await p.autocompleteMultiselect({
-    message: 'Select skills to uninstall (type to search)',
-    options: records.map((record) => ({
-      value: getRecordKey(record),
-      label: formatRecordLabel(record),
-    })),
-    required: true,
-  })
-
-  if (p.isCancel(selected)) {
-    return null
-  }
-
-  const selectedKeys = new Set(selected as string[])
-  return records.filter((record) => selectedKeys.has(getRecordKey(record)))
+  return null
 }
 
 export async function selectUninstallTargets(
   records: InstalledRecord[],
   flags: CliFlags,
-  nonInteractive: boolean,
 ): Promise<string[] | null> {
   const explicitTargets =
     typeof flags.t === 'string'
@@ -121,22 +103,8 @@ export async function selectUninstallTargets(
   }
 
   const allTargets = [...new Set(records.flatMap((record) => record.targets))]
-  if (nonInteractive || allTargets.length === 1) {
+  if (allTargets.length === 1) {
     return allTargets
   }
-
-  const selected = await p.autocompleteMultiselect({
-    message: 'Select targets to uninstall from',
-    options: allTargets.map((target) => ({
-      value: target,
-      label: target,
-    })),
-    required: true,
-  })
-
-  if (p.isCancel(selected)) {
-    return null
-  }
-
-  return selected as string[]
+  return null
 }

@@ -17,8 +17,11 @@ function createCommands() {
     sourceEnable: mock(async () => {}),
     sourceList: mock(async () => {}),
     sourceRemove: mock(async () => {}),
+    sourceSet: mock(async () => {}),
+    sourceShow: mock(async () => {}),
     sourceSkills: mock(async () => {}),
     sourceSync: mock(async () => {}),
+    sourceUnset: mock(async () => {}),
     targetList: mock(async () => {}),
     uninstallSkill: mock(async () => {}),
     updateSkills: mock(async () => {}),
@@ -43,12 +46,30 @@ function createConfig(overrides: Partial<Config> = {}): Config {
 describe('cli', () => {
   it('parseFlags parses long flags, short flags, and positional args', () => {
     expect(
-      parseFlags(['install', '--target', 'codex,cursor', '-y', '--project']),
+      parseFlags([
+        'install',
+        '--target',
+        'codex,cursor',
+        '-i',
+        '--project',
+      ]),
     ).toEqual({
       _: ['install'],
       target: 'codex,cursor',
-      y: true,
+      interactive: true,
       project: true,
+    })
+  })
+
+  it('parseFlags keeps positionals after interactive flags', () => {
+    expect(parseFlags(['-i', 'brainstorming'])).toEqual({
+      _: ['brainstorming'],
+      interactive: true,
+    })
+
+    expect(parseFlags(['--interactive', 'brainstorming'])).toEqual({
+      _: ['brainstorming'],
+      interactive: true,
     })
   })
 
@@ -87,12 +108,52 @@ describe('cli', () => {
     expect(exit).toHaveBeenCalledWith(0)
   })
 
+  it('rejects the removed yes flag before loading config', async () => {
+    const commands = createCommands()
+    const error = mock(() => {})
+    const exit = mock(() => {})
+    const loadConfig = mock(async () => createConfig())
+
+    await run(['install', 'source:alpha', '-y'], {
+      commands,
+      loadConfig,
+      log: mock(() => {}),
+      error,
+      exit,
+    })
+
+    expect(loadConfig).not.toHaveBeenCalled()
+    expect(commands.installSkill).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledWith(
+      'The -y/--yes flag has been removed. Use exact non-interactive commands, or pass -i/--interactive to enter TUI install mode.',
+    )
+    expect(exit).toHaveBeenCalledWith(1)
+  })
+
+  it('routes install with the short interactive flag', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['install', '-i', 'source:alpha'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.installSkill).toHaveBeenCalledWith(config, {
+      _: ['source:alpha'],
+      interactive: true,
+    })
+  })
+
   it('routes install with parsed flags', async () => {
     const commands = createCommands()
     const config = createConfig()
     const loadConfig = mock(async () => config)
 
-    await run(['install', 'source:alpha', '--target', 'codex', '-y'], {
+    await run(['install', 'source:alpha', '--target', 'codex'], {
       commands,
       loadConfig,
       log: mock(() => {}),
@@ -104,7 +165,6 @@ describe('cli', () => {
     expect(commands.installSkill).toHaveBeenCalledWith(config, {
       _: ['source:alpha'],
       target: 'codex',
-      y: true,
     })
   })
 
@@ -214,7 +274,75 @@ describe('cli', () => {
       config,
       'https://github.com/acme/skills.git',
       'acme',
+      {
+        _: ['add', 'https://github.com/acme/skills.git'],
+        name: 'acme',
+      },
     )
+  })
+
+  it('routes source set with option flags', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(
+      [
+        'source',
+        'set',
+        'source',
+        '--skills-path',
+        'packages/agent/skills',
+        '--structure',
+        'nested',
+      ],
+      {
+        commands,
+        loadConfig: mock(async () => config),
+        log: mock(() => {}),
+        error: mock(() => {}),
+        exit: mock(() => {}),
+      },
+    )
+
+    expect(commands.sourceSet).toHaveBeenCalledWith(config, 'source', {
+      _: ['set', 'source'],
+      'skills-path': 'packages/agent/skills',
+      structure: 'nested',
+    })
+  })
+
+  it('routes source unset with option flags', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['source', 'unset', 'source', '--branch', '--skills-path'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.sourceUnset).toHaveBeenCalledWith(config, 'source', {
+      _: ['unset', 'source'],
+      branch: true,
+      'skills-path': true,
+    })
+  })
+
+  it('routes source show', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['source', 'show', 'source'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.sourceShow).toHaveBeenCalledWith(config, 'source')
   })
 
   it('reports missing source URLs for source add', async () => {
@@ -266,6 +394,12 @@ describe('cli', () => {
 
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining('Source commands:'),
+    )
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Source flags:'),
+    )
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('--skills-path <list>'),
     )
     expect(commands.sourceList).not.toHaveBeenCalled()
     expect(commands.sourceSync).not.toHaveBeenCalled()

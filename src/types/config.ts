@@ -16,8 +16,7 @@ export interface CliFlags {
   _?: string[]
   t?: string | boolean
   target?: string | boolean
-  y?: boolean
-  yes?: boolean
+  interactive?: boolean
   project?: boolean
   global?: boolean
   'dry-run'?: boolean

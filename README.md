@@ -31,6 +31,7 @@
 - 🔍 交互式搜索与多选安装
 - 🔄 更新已安装技能
 - 📁 单个源支持多个技能目录
+- ⚙️ 通过 CLI 配置 source 的 `branch`、`skillsPath`、`structure`、`skillFile`
 
 ## 环境要求
 
@@ -62,7 +63,7 @@ ki source sync ki
 ki source skills ki
 
 # 安装本仓库自带的 ki-usage skill
-ki install ki:ki-usage -t claude-code -y
+ki install ki:ki-usage -t claude-code
 
 # 查看所有可用技能
 ki list
@@ -86,13 +87,13 @@ sources:
 ki init
 ki source sync ki
 ki source skills ki
-ki install ki:ki-usage -t claude-code -y
+ki install ki:ki-usage -t claude-code
 ```
 
 如果你希望安装到多个目标工具，也可以直接指定多个 target：
 
 ```bash
-ki install ki:ki-usage -t claude-code,cursor -y
+ki install ki:ki-usage -t claude-code,cursor
 ```
 
 ## 使用示例
@@ -111,16 +112,16 @@ ki install ki:ki-usage -t claude-code,cursor -y
 使用 ki-usage skill，帮我把 acme-skills 里的 prd-review 技能安装到 claude-code。
 ```
 
-如果你已经知道精确的 skill id 和 target，可以直接非交互安装：
+默认不会自动进入交互模式。如果你已经知道精确的 skill id 和 target，可以直接执行安装：
 
 ```bash
-ki install superpowers:brainstorming -t codex -y
+ki install superpowers:brainstorming -t codex
 ```
 
 如果某个 skill 只想在当前仓库生效：
 
 ```bash
-ki install superpowers:brainstorming -t codex --project -y
+ki install superpowers:brainstorming -t codex --project
 ```
 
 如果只想先看变更，不执行写入：
@@ -130,11 +131,28 @@ ki install superpowers:brainstorming -t codex --project --dry-run
 ki update --dry-run
 ```
 
+如果你希望显式进入 TUI 选择模式：
+
+```bash
+ki install -i
+ki install brainstorming -i
+```
+
+`-y/--yes` 已移除。执行安装或卸载时，直接提供精确参数；只有显式传入 `-i/--interactive` 时才会进入安装 TUI。
+
 ## 技能源管理工作流
 
 ```bash
 # 添加一个 Git 源，并显式命名，便于后续 enable/disable/remove
 ki source add https://github.com/acme/skills.git --name acme
+
+# 如果你已经知道目录结构，也可以在 add 时直接配置 source options
+ki source add https://github.com/acme/product-skills.git \
+  --name acme \
+  --branch main \
+  --skills-path packages/agent/skills \
+  --structure nested \
+  --skill-file SKILL.md
 
 # 也可以直接添加一个本地目录 source
 ki source add ./skills --name local-skills
@@ -148,6 +166,19 @@ ki source sync acme
 # 查看这个源里有哪些技能
 ki source skills acme
 
+# 查看 source 的当前配置、生效值和解析后的路径
+ki source show acme
+
+# 修正 source options
+ki source set acme --skills-path skills/.curated,skills/.system
+
+# 用 set 显式启用或禁用 source
+ki source set acme --disable
+ki source set acme --enable
+
+# 删除某些 option override，回退到 provider 默认值
+ki source unset acme --branch --skills-path
+
 # 临时停用这个源（保留配置）
 ki source disable acme
 
@@ -156,8 +187,8 @@ ki source enable acme
 
 # 不再使用时，先卸载这个源里已经安装的 skill，再移除 source
 # 例如：
-# ki uninstall acme:brainstorming -t codex --global -y
-# ki uninstall acme:brainstorming -t codex --project -y
+# ki uninstall acme:brainstorming -t codex --global
+# ki uninstall acme:brainstorming -t codex --project
 # ki doctor
 ki source remove acme
 ```
@@ -165,6 +196,8 @@ ki source remove acme
 注意：
 
 - `ki source add` 可以自动识别 Git URL 和现有本地目录
+- `ki source add`、`ki source set` 支持直接配置 `branch`、`skillsPath`、`structure`、`skillFile`
+- `ki source add --disabled` 可以直接以禁用状态创建 source，`ki source set --enable/--disable` 可切换启用状态
 - 添加本地目录时，路径必须已经存在，且是一个目录
 - `ki source remove` 只删除 source 配置，不会自动卸载这个 source 已安装的 skill
 
@@ -177,10 +210,13 @@ ki source remove acme
 | `ki doctor` | 检查配置和安装状态是否异常 |
 | `ki search <query>` | 按名称或 ID 搜索技能 |
 | `ki list` | 列出所有可用技能 |
-| `ki install [search]` | 安装技能 |
-| `ki uninstall [search]` | 卸载技能 |
+| `ki install [search]` | 安装精确 skill id；传 `-i/--interactive` 时进入 TUI |
+| `ki uninstall [search]` | 卸载精确 skill id，不支持隐式交互 |
 | `ki update` | 更新所有已安装技能 |
-| `ki source add <git-url-or-path> [--name <name>]` | 添加一个 Git 或本地目录技能源，可显式指定源名称 |
+| `ki source add <git-url-or-path> [flags]` | 添加一个 Git 或本地目录技能源，并可同时设置 source options |
+| `ki source set <name> [flags]` | 更新一个已有 source 的 options 或启用状态 |
+| `ki source unset <name> [flags]` | 清除一个 source 的 option override，回退默认值 |
+| `ki source show <name>` | 查看 source 的配置、生效值和解析后的路径 |
 | `ki source remove <name>` | 删除一个技能源 |
 | `ki source list` | 列出所有源 |
 | `ki source sync [name]` | 同步源 |
@@ -192,6 +228,17 @@ ki source remove acme
 ## 配置
 
 配置文件位于 `~/.config/ki/config.yaml`
+
+常见情况下，优先使用 CLI 管理 source：
+
+```bash
+ki source add <git-url-or-path> --name <name> [--branch ...] [--skills-path ...] [--structure ...] [--skill-file ...]
+ki source set <name> [--branch ...] [--skills-path ...] [--structure ...] [--skill-file ...]
+ki source unset <name> [--branch] [--skills-path] [--structure] [--skill-file]
+ki source show <name>
+```
+
+当你需要检查完整配置，或做 CLI 尚未覆盖的调整时，再直接查看和编辑 `config.yaml`。
 
 ```yaml
 sources:
@@ -221,6 +268,35 @@ targets:
     enabled: true
   - name: cursor
     enabled: true
+```
+
+示例：通过 CLI 配置一个深层 skill 目录的 Git source
+
+```bash
+ki source add https://github.com/acme/product-skills.git \
+  --name acme \
+  --branch main \
+  --skills-path packages/agent/skills \
+  --structure nested \
+  --skill-file SKILL.md
+
+ki source sync acme
+ki source skills acme
+```
+
+示例：把一个 source 改成多个 skill 目录
+
+```bash
+ki source set acme --skills-path skills/.curated,skills/.system
+ki source show acme
+```
+
+示例：先以禁用状态添加 source，再按需启用
+
+```bash
+ki source add https://github.com/acme/product-skills.git --name acme --disabled
+ki source show acme
+ki source set acme --enable
 ```
 
 ## 开发

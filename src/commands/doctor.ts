@@ -49,7 +49,6 @@ function formatScopedCommand(record: InstalledRecord, args: string[]): string {
   const scopedArgs = [
     ...args,
     record.scope === 'project' ? '--project' : '--global',
-    '-y',
   ]
 
   if (record.scope === 'project' && record.projectPath !== process.cwd()) {
@@ -64,8 +63,9 @@ function buildUninstallFix(
   targetName?: string,
 ): string {
   const args = ['ki', 'uninstall', record.id]
-  if (targetName) {
-    args.push('-t', targetName)
+  const targetNames = targetName ? [targetName] : record.targets
+  if (targetNames.length > 0) {
+    args.push('-t', targetNames.join(','))
   }
 
   return formatScopedCommand(record, args)

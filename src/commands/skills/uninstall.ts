@@ -13,10 +13,18 @@ import { selectUninstallRecords, selectUninstallTargets } from './select'
 
 export async function uninstallSkill(flags: CliFlags) {
   const searchQuery = flags._?.[0]
-  const nonInteractive = Boolean(flags.y || flags.yes)
+  const interactive = Boolean(flags.interactive)
   const currentProjectPath = process.cwd()
 
   p.intro(searchQuery ? `Uninstall: ${searchQuery}` : 'Uninstall Skill')
+
+  if (interactive) {
+    p.log.error(
+      'Interactive uninstall is not supported. Use an exact skill id, target, and scope.',
+    )
+    p.outro('Failed')
+    return
+  }
 
   const installed = await loadInstalled()
 
@@ -31,41 +39,40 @@ export async function uninstallSkill(flags: CliFlags) {
     flags,
     currentProjectPath,
   )
-  if (searchQuery) {
-    const exactMatches = filtered.filter((r) => r.id === searchQuery)
-    if (exactMatches.length > 0) {
-      filtered = exactMatches
-    } else {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter((r) => r.id.toLowerCase().includes(query))
-      if (filtered.length === 0) {
-        p.log.error(`No installed skills matching: ${searchQuery}`)
-        p.outro('Failed')
-        return
-      }
-    }
-  }
-
-  const selectedRecords = await selectUninstallRecords(filtered, nonInteractive)
-  if (!selectedRecords && nonInteractive) {
+  if (!searchQuery) {
     p.log.error(
-      'Non-interactive uninstall requires exactly one matching installation. Use --global or run from the target project with --project.',
+      'Non-interactive uninstall requires an exact skill id, target, and scope.',
     )
     p.outro('Failed')
     return
   }
-  if (!selectedRecords) {
-    p.outro('Cancelled')
+
+  const exactMatches = filtered.filter((r) => r.id === searchQuery)
+  if (exactMatches.length > 0) {
+    filtered = exactMatches
+  } else {
+    p.log.error(
+      `Non-interactive uninstall requires an exact skill id. No installed skill matches: ${searchQuery}`,
+    )
+    p.outro('Failed')
     return
   }
 
-  const targets = await selectUninstallTargets(
-    selectedRecords,
-    flags,
-    nonInteractive,
-  )
+  const selectedRecords = await selectUninstallRecords(filtered)
+  if (!selectedRecords) {
+    p.log.error(
+      'Non-interactive uninstall requires exactly one matching installation. Use an exact skill id and add --global or run from the target project with --project.',
+    )
+    p.outro('Failed')
+    return
+  }
+
+  const targets = await selectUninstallTargets(selectedRecords, flags)
   if (!targets) {
-    p.outro('Cancelled')
+    p.log.error(
+      'Non-interactive uninstall requires an explicit target when a matching installation exists in multiple targets. Use -t or --target.',
+    )
+    p.outro('Failed')
     return
   }
 
@@ -83,9 +90,20 @@ export async function uninstallSkill(flags: CliFlags) {
       if (!record.targets.includes(targetName)) continue
 
       const target = targetRegistry.get(targetName)
-      if (!target) continue
-
       const installOptions = getRecordInstallOptions(record)
+
+      if (!target) {
+        let removedTargets = removedTargetsByRecord.get(recordKey)
+        if (!removedTargets) {
+          removedTargets = new Set<string>()
+          removedTargetsByRecord.set(recordKey, removedTargets)
+        }
+        removedTargets.add(targetName)
+        p.log.warn(
+          `Removed install record for ${skillId} from ${targetName} without running a target uninstall because the target is unavailable`,
+        )
+        continue
+      }
 
       try {
         await target.uninstall(skillId, installOptions)

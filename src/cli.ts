@@ -25,6 +25,52 @@ const defaultDeps: CliDeps = {
 
 export const VERSION = readPackageVersion()
 
+const BOOLEAN_LONG_FLAGS = new Set([
+  'interactive',
+  'installed',
+  'global',
+  'project',
+  'dry-run',
+  'disabled',
+  'enable',
+  'disable',
+  'version',
+  'help',
+])
+
+const VALUE_LONG_FLAGS = new Set([
+  'name',
+  'branch',
+  'skills-path',
+  'structure',
+  'skill-file',
+  'source',
+  'target',
+])
+
+const BOOLEAN_SHORT_FLAGS = new Set(['i', 'v', 'h'])
+const VALUE_SHORT_FLAGS = new Set(['t'])
+
+function shouldConsumeFlagValue(
+  flag: string,
+  next: string | undefined,
+  isLong: boolean,
+): boolean {
+  if (!next || next.startsWith('-')) {
+    return false
+  }
+
+  if (isLong) {
+    if (BOOLEAN_LONG_FLAGS.has(flag)) return false
+    if (VALUE_LONG_FLAGS.has(flag)) return true
+    return true
+  }
+
+  if (BOOLEAN_SHORT_FLAGS.has(flag)) return false
+  if (VALUE_SHORT_FLAGS.has(flag)) return true
+  return true
+}
+
 export function parseFlags(args: string[]): CliFlags {
   const result: CliFlags = { _: [] }
 
@@ -34,7 +80,7 @@ export function parseFlags(args: string[]): CliFlags {
     if (arg.startsWith('--')) {
       const key = arg.slice(2)
       const next = args[index + 1]
-      if (next && !next.startsWith('-')) {
+      if (shouldConsumeFlagValue(key, next, true)) {
         result[key] = next
         index++
       } else {
@@ -44,9 +90,10 @@ export function parseFlags(args: string[]): CliFlags {
     }
 
     if (arg.startsWith('-') && arg.length === 2) {
-      const key = arg.slice(1)
+      const rawKey = arg.slice(1)
+      const key = rawKey === 'i' ? 'interactive' : rawKey
       const next = args[index + 1]
-      if (next && !next.startsWith('-')) {
+      if (shouldConsumeFlagValue(rawKey, next, false)) {
         result[key] = next
         index++
       } else {
@@ -74,14 +121,17 @@ Commands:
   doctor                Check config and installed skill health
   list, ls              List all available skills
   search <query>        Search skills by name or id
-  install [search]      Install skill(s)
-  uninstall [search]    Uninstall skill(s)
+  install [search]      Install an exact skill id, or use -i/--interactive
+  uninstall [search]    Uninstall an exact skill id
   update                Update installed skills
   source <cmd>          Manage sources
   target <cmd>          Manage targets
 
 Source Commands:
-  ki source add <git-url-or-path> [--name <name>]  Add a git or local source
+  ki source add <git-url-or-path> [flags]          Add a git or local source
+  ki source set <name> [flags]                     Update source settings
+  ki source unset <name> [flags]                   Remove source option overrides
+  ki source show <name>                            Show source details
   ki source remove <name>                          Remove a source
   ki source list                                   List all sources
   ki source sync [name]                            Sync all sources or a specific source
@@ -93,20 +143,58 @@ Target Commands:
   ki target list     List all targets
 
 Options:
+  --name <name>         Explicit source name
+  --branch <branch>     Source branch for git providers
+  --skills-path <list>  Comma-separated skill directory paths
+  --structure <type>    Skill layout: nested or flat
+  --skill-file <name>   Skill file name for nested sources
+  --disabled            Add source in disabled state
+  --enable              Enable a source while updating it
+  --disable             Disable a source while updating it
+  -i, --interactive     Explicitly enter TUI selection mode
   --installed           Filter installed skills only
   --source <name>       Filter by source
   --global              Use global installs only
   --project             Use current project installs only
   --dry-run             Preview changes without writing
   -t, --target <list>   Comma-separated target list
-  -y, --yes             Skip interactive prompts
   --version, -v         Show version
   --help, -h            Show this help
 `)
 }
 
+function showSourceHelp(log: CliDeps['log']): void {
+  log(`
+Source commands:
+  ki source add <git-url-or-path> [flags]  Add a git or local source
+  ki source set <name> [flags]             Update source settings
+  ki source unset <name> [flags]           Remove source option overrides
+  ki source show <name>                    Show source details
+  ki source remove <name>                  Remove a source
+  ki source list                           List all sources
+  ki source sync [name]                    Sync all sources or a specific source
+  ki source skills [name]                  List skills in a specific source
+  ki source enable <name>                  Enable a source
+  ki source disable <name>                 Disable a source
+
+Source flags:
+  --name <name>         Explicit source name for source add
+  --branch <branch>     Source branch for git providers
+  --skills-path <list>  Comma-separated skill directory paths
+  --structure <type>    Skill layout: nested or flat
+  --skill-file <name>   Skill file name for nested sources
+  --disabled            Add source in disabled state
+  --enable              Enable a source while updating it
+  --disable             Disable a source while updating it
+`)
+}
+
 function getPositionals(flags: CliFlags): string[] {
   return flags._ ?? []
+}
+
+function hasRemovedYesFlag(args: string[]): boolean {
+  return args.includes('-y') || args.includes('--yes')
 }
 
 export async function run(
@@ -124,6 +212,14 @@ export async function run(
   if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
     showHelp(deps.log)
     deps.exit(0)
+    return
+  }
+
+  if (hasRemovedYesFlag(args)) {
+    deps.error(
+      'The -y/--yes flag has been removed. Use exact non-interactive commands, or pass -i/--interactive to enter TUI install mode.',
+    )
+    deps.exit(1)
     return
   }
 
@@ -184,7 +280,43 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceAdd(config, sourceUrl, explicitName)
+          await deps.commands.sourceAdd(config, sourceUrl, explicitName, flags)
+          return
+        }
+
+        case 'set': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          await deps.commands.sourceSet(config, sourceName, flags)
+          return
+        }
+
+        case 'unset': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          await deps.commands.sourceUnset(config, sourceName, flags)
+          return
+        }
+
+        case 'show': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          await deps.commands.sourceShow(config, sourceName)
           return
         }
 
@@ -238,16 +370,7 @@ export async function run(
         }
 
         default:
-          deps.log(`
-Source commands:
-  ki source add <git-url-or-path> [--name <name>]  Add a git or local source
-  ki source remove <name>       Remove a source
-  ki source list                List all sources
-  ki source sync [name]         Sync all sources or a specific source
-  ki source skills [name]       List skills in a specific source
-  ki source enable <name>       Enable a source
-  ki source disable <name>      Disable a source
-`)
+          showSourceHelp(deps.log)
           return
       }
     }

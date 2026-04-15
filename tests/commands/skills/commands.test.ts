@@ -97,7 +97,7 @@ describe('skill command non-interactive flows', () => {
           { name: 'codex', enabled: true },
         ],
       },
-      { _: ['source:alpha'], y: true, target: 'claude-code,codex' },
+      { _: ['source:alpha'], target: 'claude-code,codex' },
     )
 
     expect(installSuccess).toHaveBeenCalledTimes(1)
@@ -172,7 +172,7 @@ describe('skill command non-interactive flows', () => {
         sources: [createSource()],
         targets: [{ name: 'codex', enabled: true }],
       },
-      { _: ['source:alpha'], y: true, target: 'codex', 'dry-run': true },
+      { _: ['source:alpha'], target: 'codex', 'dry-run': true },
     )
 
     expect(installMock).not.toHaveBeenCalled()
@@ -184,6 +184,119 @@ describe('skill command non-interactive flows', () => {
     expect(prompts.outro).toHaveBeenCalledWith(
       'Dry run: 1 skill instance(s) would be installed',
     )
+  })
+
+  it('installSkill fails fast for ambiguous non-interactive queries', async () => {
+    const prompts = createPromptMocks()
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+          {
+            id: 'source:beta',
+            name: 'Beta',
+            _source: 'source',
+            _path: '/tmp/beta/SKILL.md',
+          },
+        ]),
+      },
+    }))
+
+    const { installSkill } = await import(
+      '../../../src/commands/skills/install'
+    )
+    await installSkill(
+      {
+        sources: [createSource()],
+        targets: [{ name: 'codex', enabled: true }],
+      },
+      { _: ['a'] },
+    )
+
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Non-interactive install requires an exact skill id. Run ki search a or use ki install a -i.',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
+    expect(prompts.spinner).not.toHaveBeenCalled()
+  })
+
+  it('installSkill requires an exact id even when a partial match is unique', async () => {
+    const prompts = createPromptMocks()
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+        ]),
+      },
+    }))
+
+    const { installSkill } = await import(
+      '../../../src/commands/skills/install'
+    )
+    await installSkill(
+      {
+        sources: [createSource()],
+        targets: [{ name: 'codex', enabled: true }],
+      },
+      { _: ['alpha'] },
+    )
+
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Non-interactive install requires an exact skill id. Run ki search alpha or use ki install alpha -i.',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
+  })
+
+  it('installSkill requires an explicit target when multiple targets are enabled', async () => {
+    const prompts = createPromptMocks()
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+        ]),
+      },
+    }))
+
+    const { installSkill } = await import(
+      '../../../src/commands/skills/install'
+    )
+    await installSkill(
+      {
+        sources: [createSource()],
+        targets: [
+          { name: 'claude-code', enabled: true },
+          { name: 'codex', enabled: true },
+        ],
+      },
+      { _: ['source:alpha'] },
+    )
+
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Non-interactive install requires an explicit target when multiple enabled targets exist. Use -t/--target, or leave only one enabled target in config.',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
+    expect(prompts.spinner).not.toHaveBeenCalled()
   })
 
   it('uninstallSkill removes only selected targets from a matching installation', async () => {
@@ -233,7 +346,6 @@ describe('skill command non-interactive flows', () => {
     )
     await uninstallSkill({
       _: ['source:alpha'],
-      y: true,
       target: 'claude-code',
     })
 
@@ -250,6 +362,141 @@ describe('skill command non-interactive flows', () => {
       },
       installedRecords[1],
     ])
+  })
+
+  it('uninstallSkill rejects interactive mode', async () => {
+    const prompts = createPromptMocks()
+
+    mockModule('@clack/prompts', () => prompts)
+
+    const { uninstallSkill } = await import(
+      '../../../src/commands/skills/uninstall'
+    )
+    await uninstallSkill({
+      _: ['source:alpha'],
+      interactive: true,
+    })
+
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Interactive uninstall is not supported. Use an exact skill id, target, and scope.',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
+  })
+
+  it('uninstallSkill requires an explicit target for multi-target records', async () => {
+    const prompts = createPromptMocks()
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
+      loadInstalled: mock(async () => [
+        {
+          id: 'source:alpha',
+          source: 'source',
+          targets: ['claude-code', 'codex'],
+          scope: 'global',
+          checksum: 'sha256:1',
+          installedAt: '2026-04-14T00:00:00.000Z',
+          enabled: true,
+        },
+      ]),
+      saveInstalled: mock(async () => {}),
+    }))
+
+    const { uninstallSkill } = await import(
+      '../../../src/commands/skills/uninstall'
+    )
+    await uninstallSkill({
+      _: ['source:alpha'],
+    })
+
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Non-interactive uninstall requires an explicit target when a matching installation exists in multiple targets. Use -t or --target.',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
+  })
+
+  it('uninstallSkill requires an exact skill id', async () => {
+    const prompts = createPromptMocks()
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
+      loadInstalled: mock(async () => [
+        {
+          id: 'source:alpha',
+          source: 'source',
+          targets: ['codex'],
+          scope: 'global',
+          checksum: 'sha256:1',
+          installedAt: '2026-04-14T00:00:00.000Z',
+          enabled: true,
+        },
+      ]),
+      saveInstalled: mock(async () => {}),
+    }))
+
+    const { uninstallSkill } = await import(
+      '../../../src/commands/skills/uninstall'
+    )
+    await uninstallSkill({
+      _: ['alpha'],
+      target: 'codex',
+      global: true,
+    })
+
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      'Non-interactive uninstall requires an exact skill id. No installed skill matches: alpha',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
+  })
+
+  it('uninstallSkill removes records even when the target handler is unavailable', async () => {
+    const prompts = createPromptMocks()
+    const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
+      loadInstalled: mock(async () => [
+        {
+          id: 'source:alpha',
+          source: 'source',
+          targets: ['missing-target'],
+          scope: 'global',
+          checksum: 'sha256:1',
+          installedAt: '2026-04-14T00:00:00.000Z',
+          enabled: true,
+        },
+      ]),
+      saveInstalled: saveInstalledMock,
+    }))
+    mockModule('../../../src/targets', () => ({
+      targetRegistry: {
+        get: mock(() => undefined),
+      },
+    }))
+
+    const { uninstallSkill } = await import(
+      '../../../src/commands/skills/uninstall'
+    )
+    await uninstallSkill({
+      _: ['source:alpha'],
+      target: 'missing-target',
+      global: true,
+    })
+
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Removed install record for source:alpha from missing-target without running a target uninstall because the target is unavailable',
+    )
+    expect(saveInstalledMock).toHaveBeenCalledWith([])
+    expect(prompts.outro).toHaveBeenCalledWith('Uninstalled 1 installation(s)')
   })
 
   it('updateSkills updates only changed records and persists the full installed set', async () => {

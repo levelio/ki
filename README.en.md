@@ -25,6 +25,7 @@ English | [简体中文](./README.md)
 - 🔍 Interactive search and multi-select install flow
 - 🔄 Update installed skills
 - 📁 Multiple skill directories per source
+- ⚙️ Configure source `branch`, `skillsPath`, `structure`, and `skillFile` through the CLI
 
 ## Requirements
 
@@ -56,7 +57,7 @@ ki source sync ki
 ki source skills ki
 
 # Install the ki-usage skill from this repository
-ki install ki:ki-usage -t claude-code -y
+ki install ki:ki-usage -t claude-code
 
 # List all available skills
 ki list
@@ -80,13 +81,13 @@ Recommended flow for installing `ki-usage`:
 ki init
 ki source sync ki
 ki source skills ki
-ki install ki:ki-usage -t claude-code -y
+ki install ki:ki-usage -t claude-code
 ```
 
 To install the same skill into multiple target tools:
 
 ```bash
-ki install ki:ki-usage -t claude-code,cursor -y
+ki install ki:ki-usage -t claude-code,cursor
 ```
 
 ## Usage Examples
@@ -105,16 +106,16 @@ Use the ki-usage skill to show me which skills are available in the acme-skills 
 Use the ki-usage skill to install the acme-skills:prd-review skill into claude-code.
 ```
 
-If you already know the exact skill id and target, use a non-interactive install:
+By default, the CLI does not enter interactive mode automatically. If you already know the exact skill id and target, run the install directly:
 
 ```bash
-ki install superpowers:brainstorming -t codex -y
+ki install superpowers:brainstorming -t codex
 ```
 
 If the skill should only apply to the current repository:
 
 ```bash
-ki install superpowers:brainstorming -t codex --project -y
+ki install superpowers:brainstorming -t codex --project
 ```
 
 If you want to preview changes without writing:
@@ -124,11 +125,28 @@ ki install superpowers:brainstorming -t codex --project --dry-run
 ki update --dry-run
 ```
 
+If you want to explicitly enter the TUI flow:
+
+```bash
+ki install -i
+ki install brainstorming -i
+```
+
+`-y/--yes` has been removed. For install and uninstall, provide exact non-interactive arguments directly; only `-i/--interactive` enters the install TUI.
+
 ## Source Management Workflow
 
 ```bash
 # Add a Git source with an explicit name so enable/disable/remove stay predictable
 ki source add https://github.com/acme/skills.git --name acme
+
+# If you already know the repository layout, you can configure source options at add time
+ki source add https://github.com/acme/product-skills.git \
+  --name acme \
+  --branch main \
+  --skills-path packages/agent/skills \
+  --structure nested \
+  --skill-file SKILL.md
 
 # You can also add an existing local directory as a source
 ki source add ./skills --name local-skills
@@ -142,6 +160,19 @@ ki source sync acme
 # Inspect the skills provided by this source
 ki source skills acme
 
+# Show the source config, effective values, and resolved paths
+ki source show acme
+
+# Update source options
+ki source set acme --skills-path skills/.curated,skills/.system
+
+# Explicitly enable or disable a source with set
+ki source set acme --disable
+ki source set acme --enable
+
+# Remove option overrides and fall back to provider defaults
+ki source unset acme --branch --skills-path
+
 # Disable the source without removing its config
 ki source disable acme
 
@@ -150,8 +181,8 @@ ki source enable acme
 
 # When you no longer need a source, uninstall any skills from it first, then remove it
 # For example:
-# ki uninstall acme:brainstorming -t codex --global -y
-# ki uninstall acme:brainstorming -t codex --project -y
+# ki uninstall acme:brainstorming -t codex --global
+# ki uninstall acme:brainstorming -t codex --project
 # ki doctor
 ki source remove acme
 ```
@@ -159,6 +190,8 @@ ki source remove acme
 Notes:
 
 - `ki source add` can auto-detect Git URLs and existing local directories
+- `ki source add` and `ki source set` can configure `branch`, `skillsPath`, `structure`, and `skillFile`
+- `ki source add --disabled` creates a source in the disabled state, and `ki source set --enable/--disable` toggles it later
 - when adding a local source, the path must already exist and be a directory
 - `ki source remove` removes source config only; it does not uninstall skills that were installed from that source
 
@@ -171,10 +204,13 @@ Notes:
 | `ki doctor` | Check config and install health |
 | `ki search <query>` | Search skills by name or id |
 | `ki list` | List all available skills |
-| `ki install [search]` | Install skills |
-| `ki uninstall [search]` | Uninstall skills |
+| `ki install [search]` | Install an exact skill id; pass `-i/--interactive` to enter the TUI |
+| `ki uninstall [search]` | Uninstall an exact skill id without implicit interaction |
 | `ki update` | Update all installed skills |
-| `ki source add <git-url-or-path> [--name <name>]` | Add a Git or local-directory skill source with an optional explicit source name |
+| `ki source add <git-url-or-path> [flags]` | Add a Git or local source and optionally set source options at the same time |
+| `ki source set <name> [flags]` | Update an existing source's options or enabled state |
+| `ki source unset <name> [flags]` | Remove source option overrides and fall back to defaults |
+| `ki source show <name>` | Show a source's config, effective values, and resolved paths |
 | `ki source remove <name>` | Remove a skill source |
 | `ki source list` | List all sources |
 | `ki source sync [name]` | Sync sources |
@@ -186,6 +222,17 @@ Notes:
 ## Configuration
 
 Config file location: `~/.config/ki/config.yaml`
+
+In common cases, prefer the CLI for source management:
+
+```bash
+ki source add <git-url-or-path> --name <name> [--branch ...] [--skills-path ...] [--structure ...] [--skill-file ...]
+ki source set <name> [--branch ...] [--skills-path ...] [--structure ...] [--skill-file ...]
+ki source unset <name> [--branch] [--skills-path] [--structure] [--skill-file]
+ki source show <name>
+```
+
+Inspect or edit `config.yaml` directly only when you need the full raw config or behavior that the CLI does not cover.
 
 ```yaml
 sources:
@@ -215,6 +262,35 @@ targets:
     enabled: true
   - name: cursor
     enabled: true
+```
+
+Example: configure a Git source whose skills live in a deep subdirectory
+
+```bash
+ki source add https://github.com/acme/product-skills.git \
+  --name acme \
+  --branch main \
+  --skills-path packages/agent/skills \
+  --structure nested \
+  --skill-file SKILL.md
+
+ki source sync acme
+ki source skills acme
+```
+
+Example: switch a source to multiple skill directories
+
+```bash
+ki source set acme --skills-path skills/.curated,skills/.system
+ki source show acme
+```
+
+Example: add a source in the disabled state, then enable it later
+
+```bash
+ki source add https://github.com/acme/product-skills.git --name acme --disabled
+ki source show acme
+ki source set acme --enable
 ```
 
 ## Development

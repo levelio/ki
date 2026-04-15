@@ -149,13 +149,13 @@ describe('doctor command', () => {
       '  ❌ Installed record references missing source: missing-source:alpha -> missing-source',
     )
     expect(consoleLines).toContain(
-      '     Fix: ki uninstall missing-source:alpha --global -y',
+      '     Fix: ki uninstall missing-source:alpha -t missing-target --global',
     )
     expect(consoleLines).toContain(
       '  ❌ Installed record references missing target config: missing-source:alpha -> missing-target',
     )
     expect(consoleLines).toContain(
-      '     Fix: ki uninstall missing-source:alpha -t missing-target --global -y',
+      '     Fix: ki uninstall missing-source:alpha -t missing-target --global',
     )
     expect(prompts.outro).toHaveBeenCalledWith('Found 6 issue(s)')
   })
