@@ -304,12 +304,18 @@ ki source set acme --enable
 ```bash
 npm install
 npm run check
+npm run verify
 npm run format
 npm run dev
 npm test
 npm run build
 npm run changeset
 ```
+
+`npm install` 会自动安装本地 Git hooks：
+
+- `pre-commit` 运行 `npm run check`
+- `pre-push` 运行 `npm run verify`
 
 ## 发布
 

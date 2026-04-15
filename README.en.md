@@ -298,12 +298,18 @@ ki source set acme --enable
 ```bash
 npm install
 npm run check
+npm run verify
 npm run format
 npm run dev
 npm test
 npm run build
 npm run changeset
 ```
+
+`npm install` also installs local Git hooks automatically:
+
+- `pre-commit` runs `npm run check`
+- `pre-push` runs `npm run verify`
 
 ## Publishing
 
