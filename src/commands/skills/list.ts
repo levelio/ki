@@ -6,7 +6,7 @@ import {
 import { providerRegistry } from '../../providers'
 import type { CliFlags, Config } from '../../types'
 import * as p from '../../ui'
-import { printSkillInstallations } from './display'
+import { formatSkillListInstallation, printSkillListTable } from './display'
 import { getEnabledSources } from './shared'
 
 async function showSkills(
@@ -55,11 +55,19 @@ async function showSkills(
     return
   }
 
-  console.log('')
-  for (const skill of filtered) {
+  const rows = filtered.map((skill) => {
     const records = getInstalledRecordsForSkill(installed, skill.id)
-    printSkillInstallations(skill.id, records)
-  }
+
+    return {
+      installation: formatSkillListInstallation(records),
+      skillId: skill.id,
+      source: skill._source,
+      status: records.length > 0 ? '✓' : '·',
+    }
+  })
+
+  console.log('')
+  printSkillListTable(rows)
   console.log('')
   p.outro(`${filtered.length} skill(s)`)
 }

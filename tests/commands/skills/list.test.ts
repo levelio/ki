@@ -133,16 +133,30 @@ describe('skill listing commands', () => {
     )
 
     expect(prompts.intro).toHaveBeenCalledWith('Skill List')
-    expect(consoleLines).toContain(
-      `  ✅ source:alpha (codex @ project:${currentProjectPath})`,
+    expect(
+      consoleLines.some((line) =>
+        line.startsWith('STATUS  SKILL ID      SOURCE  INSTALLATION'),
+      ),
+    ).toBe(true)
+    expect(
+      consoleLines.some((line) => /^-+\s+-+\s+-+\s+-+\s*$/.test(line)),
+    ).toBe(true)
+    expect(
+      consoleLines.some((line) =>
+        /^✓\s+source:alpha\s+source\s+codex@project\s*$/.test(line),
+      ),
+    ).toBe(true)
+    expect(
+      consoleLines.some(
+        (line) => line === `     project:${currentProjectPath} -> codex`,
+      ),
+    ).toBe(false)
+    expect(consoleLines.some((line) => /^✓\s+source:beta\b/.test(line))).toBe(
+      false,
     )
-    expect(consoleLines).toContain(
-      `     project:${currentProjectPath} -> codex`,
+    expect(consoleLines.some((line) => /^✓\s+other:alpha\b/.test(line))).toBe(
+      false,
     )
-    expect(consoleLines).not.toContain(
-      '  ✅ source:beta (claude-code @ global)',
-    )
-    expect(consoleLines).not.toContain('  ✅ other:alpha')
     expect(prompts.note).not.toHaveBeenCalled()
     expect(prompts.outro).toHaveBeenCalledWith('1 skill(s)')
   })
@@ -237,8 +251,92 @@ describe('skill listing commands', () => {
     )
 
     expect(prompts.intro).toHaveBeenCalledWith('Search Skills')
-    expect(consoleLines).toContain('  ⬜ source:brainstorming')
-    expect(consoleLines).not.toContain('  ⬜ source:debugging')
+    expect(
+      consoleLines.some((line) =>
+        line.startsWith('STATUS  SKILL ID              SOURCE  INSTALLATION'),
+      ),
+    ).toBe(true)
+    expect(
+      consoleLines.some((line) => /^-+\s+-+\s+-+\s+-+\s*$/.test(line)),
+    ).toBe(true)
+    expect(
+      consoleLines.some((line) =>
+        /^·\s+source:brainstorming\s+source\s+-\s*$/.test(line),
+      ),
+    ).toBe(true)
+    expect(
+      consoleLines.some((line) => /^·\s+source:debugging\b/.test(line)),
+    ).toBe(false)
+    expect(prompts.outro).toHaveBeenCalledWith('1 skill(s)')
+  })
+
+  it('renders multiple installations in a single installation cell', async () => {
+    const prompts = createPromptMocks()
+    const consoleLines: string[] = []
+    console.log = mock((line = '') => {
+      consoleLines.push(String(line))
+    }) as typeof console.log
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+        ]),
+      },
+    }))
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
+      loadInstalled: mock(async () => [
+        {
+          id: 'source:alpha',
+          source: 'source',
+          targets: ['codex'],
+          scope: 'global',
+          checksum: 'sha256:1',
+          installedAt: '2026-04-14T00:00:00.000Z',
+          enabled: true,
+        },
+        {
+          id: 'source:alpha',
+          source: 'source',
+          targets: ['cursor'],
+          scope: 'project',
+          projectPath: '/tmp/project-a',
+          checksum: 'sha256:2',
+          installedAt: '2026-04-14T00:00:00.000Z',
+          enabled: true,
+        },
+      ]),
+    }))
+
+    const { listSkills } = await import('../../../src/commands/skills/list')
+    await listSkills(
+      {
+        sources: [createSource('source', true)],
+      },
+      {
+        _: [],
+      },
+    )
+
+    expect(
+      consoleLines.some((line) =>
+        /^✓\s+source:alpha\s+source\s+codex@global, cursor@project\s*$/.test(
+          line,
+        ),
+      ),
+    ).toBe(true)
+    expect(consoleLines.some((line) => line.includes('codex @ global'))).toBe(
+      false,
+    )
     expect(prompts.outro).toHaveBeenCalledWith('1 skill(s)')
   })
 })
