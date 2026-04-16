@@ -40,23 +40,17 @@ describe('init command', () => {
   it('creates the default config when no config file exists', async () => {
     const prompts = createPromptMocks()
     const saveConfig = mock(async () => {})
+    const configFile = '/tmp/test-home/.config/ki/config.yaml'
 
     mockModule('@clack/prompts', () => prompts)
     mockModule('fs', () => ({
       existsSync: () => false,
     }))
-    mockModule('os', async () => ({
-      ...(await vi.importActual<typeof import('os')>('os')),
-      homedir: () => '/tmp/test-home',
-    }))
-    mockModule('node:os', async () => ({
-      ...(await vi.importActual<typeof import('node:os')>('node:os')),
-      homedir: () => '/tmp/test-home',
-    }))
     mockModule('../../src/config', async () => ({
       ...(await vi.importActual<typeof import('../../src/config')>(
         '../../src/config',
       )),
+      getKiConfigFile: () => configFile,
       saveConfig,
     }))
 
@@ -65,7 +59,7 @@ describe('init command', () => {
 
     expect(saveConfig).toHaveBeenCalledWith(DEFAULT_CONFIG)
     expect(prompts.outro).toHaveBeenCalledWith(
-      'Config file created at /tmp/test-home/.config/ki/config.yaml',
+      `Config file created at ${configFile}`,
     )
   })
 
@@ -73,23 +67,17 @@ describe('init command', () => {
     const prompts = createPromptMocks()
     prompts.confirm = mock(async () => false)
     const saveConfig = mock(async () => {})
+    const configFile = '/tmp/test-home/.config/ki/config.yaml'
 
     mockModule('@clack/prompts', () => prompts)
     mockModule('fs', () => ({
       existsSync: () => true,
     }))
-    mockModule('os', async () => ({
-      ...(await vi.importActual<typeof import('os')>('os')),
-      homedir: () => '/tmp/test-home',
-    }))
-    mockModule('node:os', async () => ({
-      ...(await vi.importActual<typeof import('node:os')>('node:os')),
-      homedir: () => '/tmp/test-home',
-    }))
     mockModule('../../src/config', async () => ({
       ...(await vi.importActual<typeof import('../../src/config')>(
         '../../src/config',
       )),
+      getKiConfigFile: () => configFile,
       saveConfig,
     }))
 
