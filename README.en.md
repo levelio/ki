@@ -294,7 +294,7 @@ ki source unset <name> [--branch] [--skills-path] [--structure] [--skill-file]
 ki source show <name>
 ```
 
-Inspect or edit `config.yaml` directly only when you need the full raw config or behavior that the CLI does not cover.
+Inspect `config.yaml` directly only when diagnosing issues or handling advanced cases that the CLI does not cover. Do not treat manual config edits as a replacement for the normal source and install workflow.
 
 ```yaml
 sources:

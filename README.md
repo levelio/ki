@@ -300,7 +300,7 @@ ki source unset <name> [--branch] [--skills-path] [--structure] [--skill-file]
 ki source show <name>
 ```
 
-当你需要检查完整配置，或做 CLI 尚未覆盖的调整时，再直接查看和编辑 `config.yaml`。
+当你需要诊断问题，或处理 CLI 尚未覆盖的高级调整时，再直接查看 `config.yaml`。不要把手动编辑配置文件当成正常 source / install 工作流的替代路径。
 
 ```yaml
 sources:

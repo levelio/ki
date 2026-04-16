@@ -11,7 +11,7 @@ description: Use when working with ki CLI to manage skill sources, inspect avail
 
 ## Agent 执行约定
 
-- 优先使用 CLI，不要一上来就手动改 `~/.config/ki/config.yaml`。
+- 优先使用 CLI，不要一上来就手动改 `ki` 配置文件。
 - 默认使用非交互命令，避免卡在 TUI。
 - 只有显式传入 `-i` 或 `--interactive` 时，才允许进入 TUI。
 - 不要使用 `-y` 或 `--yes`；这两个参数已移除。
@@ -25,10 +25,9 @@ description: Use when working with ki CLI to manage skill sources, inspect avail
 
 对下面这几类用户任务，Agent 不能用手工文件操作来模拟成功：
 
-- 不能手动编辑 `~/.config/ki/config.yaml` 来代替 `ki source add`、`ki source set`、`ki source unset`、`ki source enable`、`ki source disable`、`ki source remove`。
-- 不能手动编辑 `~/.config/ki/installed.json` 来代替 `ki install`、`ki uninstall`、`ki update`。
-- 不能手动编辑 `~/.config/ki/installed.json` 来代替 `ki install`、`ki uninstall`、`ki update`、`ki repair`、`ki restore`。
-- 不能直接把 skill 文件或目录复制、软链接到 target 目录，例如 `~/.claude/skills/`、`~/.agents/skills/`、`~/.cursor/skills/`，来代替 `ki install`。
+- 不能手动编辑 `ki` 配置文件来代替 `ki source add`、`ki source set`、`ki source unset`、`ki source enable`、`ki source disable`、`ki source remove`。
+- 不能手动编辑 `ki` 安装索引来代替 `ki install`、`ki uninstall`、`ki update`、`ki repair`、`ki restore`。
+- 不能直接把 skill 文件或目录复制、软链接到 target 的 skill 目录来代替 `ki install`。例如在 macOS / Linux 下，不要直接改 `~/.claude/skills/`、`~/.agents/skills/`、`~/.cursor/skills/`。
 - 不能在 CLI 安装失败后，靠手工改配置或手工复制文件把结果补出来，然后向用户报告安装成功。
 
 允许手动查看这些文件做诊断，但诊断结束后，真正的修复动作仍应回到 `ki` CLI；如果 CLI 本身有 bug，应报告 bug 或修 CLI，而不是绕过 CLI 完成用户任务。
@@ -497,7 +496,7 @@ ki doctor
 - 恢复使用：`ki source enable <name>`
 - 删除：`ki source remove <name>`
 
-优先用 CLI 完成这些动作；对于正常的 source 生命周期管理，不要回退到直接编辑 `~/.config/ki/config.yaml`。
+优先用 CLI 完成这些动作；对于正常的 source 生命周期管理，不要回退到直接编辑 `ki` 配置文件。
 
 启用状态也优先走 CLI：
 
@@ -519,7 +518,7 @@ ki doctor
 1. 已知目录结构：
    先 `ki source add <git-url-or-path> --name <name> ...flags...`；如果 source 已存在，则用 `ki source set <name> ...flags...`；然后执行 `ki source sync <name>` 和 `ki source skills <name>`。
 2. 未知目录结构：
-   先 `ki source add <git-url-or-path> --name <name>`，再执行 `ki source sync <name>`，检查 `~/.config/ki/cache/` 下的缓存仓库目录，确定 `options` 后优先用 `ki source set <name> ...flags...` 更新，然后重新执行 `ki source sync <name>` 和 `ki source skills <name>`。
+   先 `ki source add <git-url-or-path> --name <name>`，再执行 `ki source sync <name>`，检查 `ki` 缓存目录下的缓存仓库，确定 `options` 后优先用 `ki source set <name> ...flags...` 更新，然后重新执行 `ki source sync <name>` 和 `ki source skills <name>`。
 
 不要只说“这个仓库没扫到 skill”。应先检查是不是 source 路径结构和默认值不一致。
 
@@ -531,9 +530,9 @@ ki doctor
 
 1. 先执行 `ki source add <git-url-or-path> --name <name>`。
 2. 再执行 `ki source sync <name>`。
-3. 然后检查 `~/.config/ki/cache/` 下该 source 的缓存仓库目录。
+3. 然后检查 `ki` 缓存目录下该 source 的缓存仓库目录。
 4. 基于缓存仓库的真实目录结构，判断应该设置的 `options.skillsPath`、`options.structure`、`options.skillFile`，必要时补 `options.branch`。
-5. 优先用 `ki source set <name> ...flags...` 更新 source；不要把手动改 `~/.config/ki/config.yaml` 当成正常完成路径。
+5. 优先用 `ki source set <name> ...flags...` 更新 source；不要把手动改 `ki` 配置文件当成正常完成路径。
 6. 再次执行 `ki source sync <name>` 和 `ki source skills <name>` 验证。
 
 Agent 不要为了分析 skill 目录结构，额外把同一个 Git 仓库 clone 到业务项目目录里。
@@ -541,7 +540,9 @@ Agent 不要为了分析 skill 目录结构，额外把同一个 Git 仓库 clon
 当前实现中，Git source 会被缓存到：
 
 ```text
-~/.config/ki/cache/
+Linux:   ${XDG_CONFIG_HOME:-~/.config}/ki/cache/
+macOS:   ~/.config/ki/cache/
+Windows: %APPDATA%\ki\cache\
 ```
 
 这里的目录名由 source URL 推导而来，所以 Agent 应优先通过查看该目录下的缓存仓库来分析结构，而不是凭空猜测 `skillsPath`。
@@ -605,7 +606,15 @@ ki update --dry-run
 ## 配置文件位置
 
 ```text
-~/.config/ki/
+Linux:   ${XDG_CONFIG_HOME:-~/.config}/ki/
+macOS:   ~/.config/ki/
+Windows: %APPDATA%\ki\
+```
+
+目录内容示例：
+
+```text
+ki/
 ├── config.yaml
 ├── cache/
 └── installed.json
@@ -638,7 +647,7 @@ ki update --dry-run
 推荐步骤：
 
 1. 先确认 source 已经同步成功：`ki source sync <name>`
-2. 查看 `~/.config/ki/cache/` 下的缓存仓库目录
+2. 查看 `ki` 缓存目录下的缓存仓库目录
 3. 在缓存仓库里定位真实 skill 根目录
 4. 判断它属于哪种结构：
    - `nested`：每个 skill 一个目录，目录下有 `SKILL.md`
@@ -769,7 +778,7 @@ ki source set acme --enable
 - 如果 CLI 能表达，就优先 `ki source add`、`ki source set`、`ki source unset`、`ki source show`。
 - 修改后必须用 `ki source sync <name>` 和 `ki source skills <name>` 验证结果。
 - 如果仓库默认分支不是 `main`，再补 `--branch`；不要无依据修改 branch。
-- 手动编辑 `config.yaml` 仅限于定位 `ki` 自身 bug 时的临时诊断，不应作为安装或配置任务的交付结果。
+- 手动编辑 `config.yaml` 仅限于定位 `ki` 自身 bug，或处理 CLI 尚未覆盖的高级场景时的临时诊断；不应作为正常安装或配置任务的交付结果。
 
 ## 技能目录结构
 
@@ -813,7 +822,7 @@ ki install brainstorming -i
 | 错误 | 原因 | 解决 |
 |------|------|------|
 | 技能列表为空 | 源未同步 | `ki source sync` |
-| 找不到源 | 配置错误 | 检查 `~/.config/ki/config.yaml` |
+| 找不到源 | 配置错误 | 检查 `ki` 配置文件路径和 source 名称 |
 | 安装失败 | 目标名称无效或目标工具不可用 | 检查 `targets` 配置和目标工具环境 |
 | Git 同步失败 | 网络或权限问题 | 检查 URL 和访问权限 |
 
