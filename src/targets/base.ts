@@ -21,6 +21,10 @@ export abstract class BaseTarget implements Target {
   abstract getGlobalPath(): string
   abstract getProjectPath(projectPath: string): string
 
+  resolveInstalledId(skillId: string): string {
+    return this.getSkillFileName(skillId).replace(/\.md$/, '')
+  }
+
   protected getInstallPath(options?: InstallOptions): string {
     if (options?.scope === 'project' && options.projectPath) {
       return this.getProjectPath(options.projectPath)
@@ -46,6 +50,17 @@ export abstract class BaseTarget implements Target {
     if (existsSync(filePath)) {
       await unlink(filePath)
     }
+  }
+
+  async isInstalled(
+    skillId: string,
+    options?: InstallOptions,
+  ): Promise<boolean> {
+    const basePath = this.getInstallPath(options)
+    const fileName = this.getSkillFileName(skillId)
+    const filePath = join(basePath, fileName)
+
+    return existsSync(filePath)
   }
 
   async list(

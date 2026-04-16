@@ -1,4 +1,3 @@
-import * as p from '@clack/prompts'
 import {
   filterInstalledRecordsByScope,
   getInstalledRecordsForSkill,
@@ -6,6 +5,7 @@ import {
 } from '../../installed'
 import { providerRegistry } from '../../providers'
 import type { CliFlags, Config } from '../../types'
+import * as p from '../../ui'
 import { printSkillInstallations } from './display'
 import { getEnabledSources } from './shared'
 

@@ -1,4 +1,3 @@
-import * as p from '@clack/prompts'
 import {
   filterInstalledRecordsByScope,
   formatRecordLocation,
@@ -11,6 +10,7 @@ import {
 import { providerRegistry } from '../../providers'
 import { targetRegistry } from '../../targets'
 import type { CliFlags, Config } from '../../types'
+import * as p from '../../ui'
 import {
   findSkillSourceConfig,
   getEnabledSources,

@@ -1,6 +1,7 @@
 export * from './commands/init'
 export * from './commands/doctor'
 export * from './commands/status'
+export * from './commands/reconcile'
 export * from './commands/skills'
 export * from './commands/sources'
 export * from './commands/targets'

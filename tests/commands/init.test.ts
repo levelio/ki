@@ -4,6 +4,19 @@ import { DEFAULT_CONFIG } from '../../src/types'
 
 const mock = vi.fn
 
+function setTTY(value: boolean) {
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value,
+  })
+  Object.defineProperty(process.stderr, 'isTTY', {
+    configurable: true,
+    value,
+  })
+}
+
+setTTY(true)
+
 function createPromptMocks() {
   return {
     intro: mock(() => {}),
@@ -19,6 +32,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
+  setTTY(true)
   resetModuleMocks()
 })
 
@@ -39,7 +53,10 @@ describe('init command', () => {
       ...(await vi.importActual<typeof import('node:os')>('node:os')),
       homedir: () => '/tmp/test-home',
     }))
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig,
     }))
 
@@ -69,7 +86,10 @@ describe('init command', () => {
       ...(await vi.importActual<typeof import('node:os')>('node:os')),
       homedir: () => '/tmp/test-home',
     }))
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig,
     }))
 

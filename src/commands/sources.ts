@@ -1,16 +1,33 @@
 import { existsSync, lstatSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import * as p from '@clack/prompts'
-import { saveConfig } from '../config'
+import { getKiCacheDir, saveConfig } from '../config'
+import { isSkillInstalledInTarget } from '../installations'
 import {
+  type InstalledRecord,
   filterInstalledRecordsByScope,
+  findInstalledRecordIndex,
+  formatTargetsAtLocation,
   getInstalledRecordsForSkill,
+  getRecordInstallOptions,
+  getRecordKey,
   loadInstalled,
+  saveInstalled,
 } from '../installed'
 import { providerRegistry } from '../providers'
-import type { CliFlags, Config, SkillMeta, SourceConfig } from '../types'
+import { targetRegistry } from '../targets'
+import type {
+  CliFlags,
+  Config,
+  InstallOptions,
+  SkillContent,
+  SkillMeta,
+  SourceConfig,
+} from '../types'
+import * as p from '../ui'
 import { printSourceSkillInstallations } from './skills/display'
+import { selectInstallTargets } from './skills/select'
+import { findSkillSourceConfig, getErrorMessage } from './skills/shared'
 
 const VALID_STRUCTURES = new Set(['nested', 'flat'])
 
@@ -29,6 +46,44 @@ function getSelectedEnabledSources(
   return getEnabledSources(config).filter(
     (source) => source.name === sourceName,
   )
+}
+
+function getExplicitOrEnabledTargets(
+  targets: string[] | null,
+  options: {
+    allowUnavailable?: boolean
+  } = {},
+): string[] | false {
+  if (!targets) {
+    p.log.error(
+      'Non-interactive command requires an explicit target when multiple enabled targets exist. Use -t/--target, or leave only one enabled target in config.',
+    )
+    p.outro('Failed')
+    return false
+  }
+
+  const normalizedTargets = [
+    ...new Set(targets.map((target) => target.trim())),
+  ].filter(Boolean)
+
+  if (normalizedTargets.length === 0) {
+    p.log.error(
+      'No enabled targets. Specify with -t or enable targets in config.',
+    )
+    p.outro('Failed')
+    return false
+  }
+
+  const invalidTargets = normalizedTargets.filter(
+    (targetName) => !targetRegistry.get(targetName),
+  )
+  if (invalidTargets.length > 0 && !options.allowUnavailable) {
+    p.log.error(`Unknown target(s): ${invalidTargets.join(', ')}`)
+    p.outro('Failed')
+    return false
+  }
+
+  return normalizedTargets
 }
 
 function findSource(
@@ -94,7 +149,7 @@ function getGitCachePath(url: string): string {
     .replace(/[/:]/g, '-')
     .replace(/^-/, '')
 
-  return join(homedir(), '.config', 'ki', 'cache', cacheName)
+  return join(getKiCacheDir(), cacheName)
 }
 
 function normalizeSkillsPath(
@@ -250,12 +305,13 @@ export async function sourceList(config: Pick<Config, 'sources'>) {
   }
 
   p.outro(`${config.sources.length} source(s)`)
+  return true
 }
 
 export async function sourceSync(
   config: Pick<Config, 'sources'>,
   sourceName?: string,
-) {
+): Promise<boolean> {
   p.intro('Sync Sources')
 
   const spinner = p.spinner()
@@ -266,7 +322,7 @@ export async function sourceSync(
     spinner.stop()
     p.log.error(`Source not found or disabled: ${sourceName}`)
     p.outro('Failed')
-    return
+    return false
   }
 
   for (const source of sourcesToSync) {
@@ -280,13 +336,14 @@ export async function sourceSync(
     `Synced ${sourcesToSync.length} source(s), found ${skills.length} skills`,
   )
   p.outro('Done')
+  return true
 }
 
 export async function sourceSkills(
   config: Pick<Config, 'sources'>,
   sourceName?: string,
   flags: CliFlags = { _: [] },
-) {
+): Promise<boolean> {
   p.intro(sourceName ? `Skills in ${sourceName}` : 'Skills by Source')
 
   const spinner = p.spinner()
@@ -297,12 +354,22 @@ export async function sourceSkills(
     spinner.stop()
     p.log.error(`Source not found or disabled: ${sourceName}`)
     p.outro('Failed')
-    return
+    return false
   }
 
   const skills = await providerRegistry.discoverAll(sourcesToQuery)
 
   spinner.stop()
+
+  if (skills.length === 0) {
+    p.note(
+      sourceName
+        ? `No skills found in ${sourceName}`
+        : 'No skills found in enabled sources',
+    )
+    p.outro('0 skill(s)')
+    return true
+  }
 
   const bySource: Record<string, SkillMeta[]> = {}
   for (const skill of skills) {
@@ -331,18 +398,335 @@ export async function sourceSkills(
 
   console.log('')
   p.outro(`${skills.length} skill(s)`)
+  return true
+}
+
+export async function sourceInstall(
+  config: Pick<Config, 'sources' | 'targets'>,
+  sourceName: string,
+  flags: CliFlags = { _: [] },
+): Promise<boolean> {
+  p.intro(`Install Source: ${sourceName}`)
+
+  const source = getSelectedEnabledSources(config, sourceName)[0]
+  if (!source) {
+    p.log.error(`Source not found or disabled: ${sourceName}`)
+    p.outro('Failed')
+    return false
+  }
+
+  const targets = getExplicitOrEnabledTargets(
+    await selectInstallTargets(config.targets, flags, false),
+  )
+  if (targets === false) {
+    return false
+  }
+
+  const skills = await providerRegistry.discoverAll([source])
+  if (skills.length === 0) {
+    p.note(`No skills found in ${sourceName}`)
+    p.outro('Done')
+    return true
+  }
+
+  const scope: 'global' | 'project' = flags.project ? 'project' : 'global'
+  const installOptions: InstallOptions = flags.project
+    ? { scope: 'project', projectPath: process.cwd() }
+    : { scope: 'global' }
+
+  if (flags['dry-run']) {
+    console.log('')
+    for (const skill of skills) {
+      console.log(
+        `  Would install ${skill.id} (${formatTargetsAtLocation(targets, installOptions)})`,
+      )
+    }
+    console.log('')
+    p.outro(
+      `Dry run: ${skills.length} skill instance(s) would be installed from ${sourceName}`,
+    )
+    return true
+  }
+
+  const spinner = p.spinner()
+  spinner.start('Installing...')
+
+  const installed = await loadInstalled()
+  let installedCount = 0
+  let installedTargetCount = 0
+  let hadFailures = false
+
+  for (const skill of skills) {
+    spinner.message(`Installing ${skill.id}...`)
+
+    const sourceConfig = findSkillSourceConfig(config, skill)
+    if (!sourceConfig) {
+      hadFailures = true
+      p.log.warn(
+        `Skipped ${skill.id}: source config not found for ${skill._source}`,
+      )
+      continue
+    }
+
+    let content: SkillContent
+    try {
+      content = await providerRegistry.fetchContent(skill, sourceConfig)
+    } catch (error) {
+      hadFailures = true
+      p.log.warn(
+        `Skipped ${skill.id}: failed to fetch content: ${getErrorMessage(error)}`,
+      )
+      continue
+    }
+    const successfulTargets: string[] = []
+
+    for (const targetName of targets) {
+      const target = targetRegistry.get(targetName)
+      if (!target) {
+        hadFailures = true
+        p.log.warn(`Skipped ${skill.id}: target not found: ${targetName}`)
+        continue
+      }
+
+      try {
+        await target.install(content, installOptions)
+        const verified = await isSkillInstalledInTarget(
+          target,
+          skill.id,
+          installOptions,
+        )
+        if (!verified) {
+          hadFailures = true
+          p.log.warn(
+            `Install verification failed for ${skill.id} on ${targetName}: target did not report the skill after install`,
+          )
+          continue
+        }
+
+        successfulTargets.push(targetName)
+      } catch (error) {
+        hadFailures = true
+        p.log.warn(
+          `Failed to install ${skill.id} to ${targetName}: ${getErrorMessage(error)}`,
+        )
+      }
+    }
+
+    if (successfulTargets.length === 0) {
+      hadFailures = true
+      p.log.warn(
+        `Skipped recording ${skill.id}: no targets installed successfully`,
+      )
+      continue
+    }
+
+    const existingIndex = findInstalledRecordIndex(installed, {
+      id: skill.id,
+      scope,
+      projectPath:
+        installOptions.scope === 'project'
+          ? installOptions.projectPath
+          : undefined,
+    })
+    const existingRecord = existingIndex >= 0 ? installed[existingIndex] : null
+    const sharedRecordFields = {
+      id: skill.id,
+      source: skill._source,
+      targets: existingRecord
+        ? [...new Set([...existingRecord.targets, ...successfulTargets])]
+        : successfulTargets,
+      checksum: content.checksum,
+      installedAt: new Date().toISOString(),
+      enabled: true,
+    }
+    const record: InstalledRecord =
+      installOptions.scope === 'project'
+        ? {
+            ...sharedRecordFields,
+            scope: 'project',
+            projectPath: installOptions.projectPath,
+          }
+        : { ...sharedRecordFields, scope: 'global' }
+
+    if (existingIndex >= 0) {
+      installed[existingIndex] = record
+    } else {
+      installed.push(record)
+    }
+
+    p.log.success(
+      `Installed ${skill.id} (${formatTargetsAtLocation(successfulTargets, record)})`,
+    )
+    installedCount++
+    installedTargetCount += successfulTargets.length
+  }
+
+  await saveInstalled(installed)
+
+  if (hadFailures) {
+    spinner.stop(
+      `Installed ${installedCount} skill instance(s) from ${sourceName} to ${installedTargetCount} target(s) with errors`,
+    )
+    p.outro('Failed')
+    return false
+  }
+
+  spinner.stop(
+    `Installed ${installedCount} skill instance(s) from ${sourceName} to ${installedTargetCount} target(s) in ${scope}`,
+  )
+  p.outro('Done')
+  return true
+}
+
+export async function sourceUninstall(
+  config: Pick<Config, 'sources'>,
+  sourceName: string,
+  flags: CliFlags = { _: [] },
+): Promise<boolean> {
+  p.intro(`Uninstall Source: ${sourceName}`)
+
+  if (!findSource(config, sourceName)) {
+    p.log.error(`Source not found: ${sourceName}`)
+    p.outro('Failed')
+    return false
+  }
+
+  const currentProjectPath = process.cwd()
+  const allInstalled = await loadInstalled()
+  const installed = filterInstalledRecordsByScope(
+    allInstalled,
+    flags,
+    currentProjectPath,
+  ).filter((record) => record.source === sourceName)
+
+  if (installed.length === 0) {
+    p.note(`No installed skills found for source: ${sourceName}`)
+    p.outro('Done')
+    return true
+  }
+
+  const explicitTargets =
+    typeof flags.t === 'string'
+      ? flags.t
+      : typeof flags.target === 'string'
+        ? flags.target
+        : undefined
+  const targets = getExplicitOrEnabledTargets(
+    explicitTargets
+      ? explicitTargets.split(',').map((target) => target.trim())
+      : [...new Set(installed.flatMap((record) => record.targets))],
+    { allowUnavailable: true },
+  )
+  if (targets === false) {
+    return false
+  }
+
+  const spinner = p.spinner()
+  spinner.start('Uninstalling...')
+
+  const removedTargetsByRecord = new Map<string, Set<string>>()
+  let hadFailures = false
+
+  for (const record of installed) {
+    const recordKey = getRecordKey(record)
+    spinner.message(`Uninstalling ${record.id}...`)
+
+    for (const targetName of targets) {
+      if (!record.targets.includes(targetName)) continue
+
+      const target = targetRegistry.get(targetName)
+      if (!target) {
+        let removedTargets = removedTargetsByRecord.get(recordKey)
+        if (!removedTargets) {
+          removedTargets = new Set<string>()
+          removedTargetsByRecord.set(recordKey, removedTargets)
+        }
+        removedTargets.add(targetName)
+        p.log.warn(
+          `Removed install record for ${record.id} from ${targetName} without running a target uninstall because the target is unavailable`,
+        )
+        continue
+      }
+
+      try {
+        await target.uninstall(record.id, getRecordInstallOptions(record))
+        const stillInstalled = await isSkillInstalledInTarget(
+          target,
+          record.id,
+          getRecordInstallOptions(record),
+        )
+        if (stillInstalled) {
+          hadFailures = true
+          p.log.warn(
+            `Uninstall verification failed for ${record.id} on ${targetName}: target still reports the skill as installed`,
+          )
+          continue
+        }
+
+        let removedTargets = removedTargetsByRecord.get(recordKey)
+        if (!removedTargets) {
+          removedTargets = new Set<string>()
+          removedTargetsByRecord.set(recordKey, removedTargets)
+        }
+        removedTargets.add(targetName)
+      } catch (error) {
+        hadFailures = true
+        p.log.warn(
+          `Failed to remove ${record.id} from ${targetName}: ${getErrorMessage(error)}`,
+        )
+      }
+    }
+  }
+
+  const newInstalled = allInstalled
+    .map((record) => {
+      const removedTargets = removedTargetsByRecord.get(getRecordKey(record))
+      if (!removedTargets || removedTargets.size === 0) {
+        return record
+      }
+
+      const remainingTargets = record.targets.filter(
+        (target) => !removedTargets.has(target),
+      )
+      if (remainingTargets.length === 0) {
+        return null
+      }
+
+      return { ...record, targets: remainingTargets }
+    })
+    .filter(Boolean) as InstalledRecord[]
+
+  await saveInstalled(newInstalled)
+
+  const uninstalledCount = installed.filter((record) =>
+    removedTargetsByRecord.has(getRecordKey(record)),
+  ).length
+  if (hadFailures) {
+    spinner.stop(
+      `Uninstalled ${uninstalledCount} skill instance(s) from ${sourceName} with errors`,
+    )
+    p.outro('Failed')
+    return false
+  }
+
+  spinner.stop(
+    `Uninstalled ${uninstalledCount} skill instance(s) from ${sourceName}`,
+  )
+  p.outro('Done')
+  return true
 }
 
 export async function sourceEnable(config: Config, sourceName: string) {
   const source = findSource(config, sourceName)
   if (!source) {
     p.log.error(`Source not found: ${sourceName}`)
-    return
+    return false
   }
 
   source.enabled = true
   await saveConfig(config)
   p.log.success(`Enabled source: ${sourceName}`)
+  return true
 }
 
 export async function sourceAdd(
@@ -350,33 +734,33 @@ export async function sourceAdd(
   url: string,
   explicitName?: string,
   flags: CliFlags = { _: [] },
-) {
+): Promise<boolean> {
   const source = detectSource(url)
   if (!source) {
     p.log.error(
       `Unsupported source. Use a git URL or an existing local directory: ${url}`,
     )
-    return
+    return false
   }
 
   const sourceName = explicitName || inferSourceName(source.url)
   if (findSource(config, sourceName)) {
     p.log.error(`Source already exists: ${sourceName}`)
-    return
+    return false
   }
   if (config.sources.some((existing) => existing.url === source.url)) {
     p.log.error(`Source URL already exists: ${source.url}`)
-    return
+    return false
   }
 
   const options = getSourceOptionUpdates(flags, source.provider)
   if (options === null) {
-    return
+    return false
   }
 
   const enabled = getSourceEnableUpdate(flags, true)
   if (enabled === undefined) {
-    return
+    return false
   }
 
   config.sources.push({
@@ -389,27 +773,28 @@ export async function sourceAdd(
 
   await saveConfig(config)
   p.log.success(`Added source: ${sourceName}`)
+  return true
 }
 
 export async function sourceSet(
   config: Config,
   sourceName: string,
   flags: CliFlags,
-) {
+): Promise<boolean> {
   const source = findSource(config, sourceName)
   if (!source) {
     p.log.error(`Source not found: ${sourceName}`)
-    return
+    return false
   }
 
   const options = getSourceOptionUpdates(flags, source.provider)
   if (options === null) {
-    return
+    return false
   }
 
   const enabled = getSourceEnableUpdate(flags, false)
   if (enabled === undefined) {
-    return
+    return false
   }
 
   const nextOptions = { ...(source.options || {}), ...options }
@@ -421,7 +806,7 @@ export async function sourceSet(
   const hasEnabledUpdate = enabled !== null
   if (!hasOptionUpdates && !hasEnabledUpdate) {
     p.log.error('No source changes specified')
-    return
+    return false
   }
 
   source.options =
@@ -432,17 +817,18 @@ export async function sourceSet(
 
   await saveConfig(config)
   p.log.success(`Updated source: ${sourceName}`)
+  return true
 }
 
 export async function sourceUnset(
   config: Config,
   sourceName: string,
   flags: CliFlags,
-) {
+): Promise<boolean> {
   const source = findSource(config, sourceName)
   if (!source) {
     p.log.error(`Source not found: ${sourceName}`)
-    return
+    return false
   }
 
   const unsetKeys = [
@@ -454,7 +840,7 @@ export async function sourceUnset(
 
   if (unsetKeys.length === 0) {
     p.log.error('No source options specified to unset')
-    return
+    return false
   }
 
   const nextOptions = { ...(source.options || {}) }
@@ -471,16 +857,17 @@ export async function sourceUnset(
 
   await saveConfig(config)
   p.log.success(`Unset source options: ${sourceName}`)
+  return true
 }
 
 export async function sourceShow(
   config: Pick<Config, 'sources'>,
   sourceName: string,
-) {
+): Promise<boolean> {
   const source = findSource(config, sourceName)
   if (!source) {
     p.log.error(`Source not found: ${sourceName}`)
-    return
+    return false
   }
 
   const effectiveOptions = getEffectiveSourceOptions(source)
@@ -507,13 +894,14 @@ export async function sourceShow(
   }
   console.log('')
   p.outro('Done')
+  return true
 }
 
 export async function sourceRemove(config: Config, sourceName: string) {
   const source = findSource(config, sourceName)
   if (!source) {
     p.log.error(`Source not found: ${sourceName}`)
-    return
+    return false
   }
 
   config.sources = config.sources.filter(
@@ -521,16 +909,18 @@ export async function sourceRemove(config: Config, sourceName: string) {
   )
   await saveConfig(config)
   p.log.warn(`Removed source: ${sourceName}`)
+  return true
 }
 
 export async function sourceDisable(config: Config, sourceName: string) {
   const source = findSource(config, sourceName)
   if (!source) {
     p.log.error(`Source not found: ${sourceName}`)
-    return
+    return false
   }
 
   source.enabled = false
   await saveConfig(config)
   p.log.warn(`Disabled source: ${sourceName}`)
+  return true
 }

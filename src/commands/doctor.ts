@@ -1,8 +1,12 @@
-import { existsSync } from 'node:fs'
-import * as p from '@clack/prompts'
+import {
+  collectInstallationDrift,
+  formatScannedLocation,
+  getTargetPath,
+} from '../installations'
 import { type InstalledRecord, loadInstalled } from '../installed'
 import { targetRegistry } from '../targets'
 import type { Config } from '../types'
+import * as p from '../ui'
 
 interface DoctorIssue {
   level: 'warn' | 'error'
@@ -13,14 +17,12 @@ interface DoctorIssue {
 interface DoctorDeps {
   cwd: () => string
   loadInstalled: typeof loadInstalled
-  pathExists: typeof existsSync
   targetRegistry: Pick<typeof targetRegistry, 'get'>
 }
 
 const defaultDoctorDeps: DoctorDeps = {
   cwd: () => process.cwd(),
   loadInstalled,
-  pathExists: existsSync,
   targetRegistry,
 }
 
@@ -89,34 +91,12 @@ function getNoEnabledSourcesFix(config: Pick<Config, 'sources'>): string {
   return `ki source enable ${quoteShellArg(config.sources[0].name)}`
 }
 
-function checkRecordTargetPath(
-  record: InstalledRecord,
-  targetName: string,
-  deps: Pick<DoctorDeps, 'pathExists' | 'targetRegistry'>,
-): string | null {
-  const target = deps.targetRegistry.get(targetName)
-  if (!target) {
-    return null
-  }
-
-  let path: string
-  try {
-    path =
-      record.scope === 'project'
-        ? target.getProjectPath(record.projectPath)
-        : target.getGlobalPath()
-  } catch {
-    return null
-  }
-
-  return deps.pathExists(path) ? null : path
-}
-
-function collectIssues(
+async function collectIssues(
   config: Pick<Config, 'sources' | 'targets'>,
   records: InstalledRecord[],
-  deps: Pick<DoctorDeps, 'pathExists' | 'targetRegistry'>,
-): DoctorIssue[] {
+  currentProjectPath: string,
+  deps: Pick<DoctorDeps, 'targetRegistry'>,
+): Promise<DoctorIssue[]> {
   const issues: DoctorIssue[] = []
 
   if (config.sources.length === 0) {
@@ -191,24 +171,50 @@ function collectIssues(
           `Installed record references unsupported target: ${record.id} -> ${targetName}`,
           buildUninstallFix(record, targetName),
         )
-        continue
-      }
-
-      const missingPath = checkRecordTargetPath(record, targetName, deps)
-      if (missingPath) {
-        const source = config.sources.find(
-          (existing) => existing.name === record.source,
-        )
-        addIssue(
-          issues,
-          'warn',
-          `Expected target path does not exist for ${record.id} -> ${targetName}: ${missingPath}`,
-          source?.enabled
-            ? buildInstallFix(record, targetName)
-            : buildUninstallFix(record, targetName),
-        )
       }
     }
+  }
+
+  const drift = await collectInstallationDrift(
+    records,
+    config.targets,
+    currentProjectPath,
+    deps,
+  )
+
+  for (const missing of drift.missingRecordedTargets) {
+    const source = config.sources.find(
+      (existing) => existing.name === missing.record.source,
+    )
+    addIssue(
+      issues,
+      'warn',
+      `Installed record is missing from target: ${missing.record.id} -> ${missing.targetName} @ ${formatScannedLocation(missing.record)}`,
+      source?.enabled
+        ? buildInstallFix(missing.record, missing.targetName)
+        : buildUninstallFix(missing.record, missing.targetName),
+    )
+  }
+
+  for (const untracked of drift.untrackedTargetInstallations) {
+    const target = deps.targetRegistry.get(untracked.targetName)
+    const targetPath = target ? getTargetPath(target, untracked) : null
+    addIssue(
+      issues,
+      'warn',
+      `Untracked target installation detected: ${untracked.targetName} -> ${untracked.skillId} @ ${formatScannedLocation(untracked)}`,
+      targetPath
+        ? `Inspect ${quoteShellArg(targetPath)} and either reinstall this skill via ki or remove the orphaned target artifact`
+        : undefined,
+    )
+  }
+
+  for (const scanError of drift.scanErrors) {
+    addIssue(
+      issues,
+      'warn',
+      `Failed to scan target ${scanError.targetName} @ ${formatScannedLocation(scanError)}: ${scanError.message}`,
+    )
   }
 
   return issues
@@ -230,7 +236,7 @@ export async function runDoctor(
     (record) =>
       record.scope === 'project' && record.projectPath === currentProjectPath,
   )
-  const issues = collectIssues(config, records, deps)
+  const issues = await collectIssues(config, records, currentProjectPath, deps)
 
   console.log('\nSummary')
   console.log(

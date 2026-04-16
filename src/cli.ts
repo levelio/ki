@@ -119,10 +119,13 @@ Commands:
   init                  Initialize config file with defaults
   status                Show enabled sources, targets, and installs
   doctor                Check config and installed skill health
+  reconcile             Compare installed index with target state
+  repair                Repair installed index drift without touching targets
   list, ls              List all available skills
   search <query>        Search skills by name or id
   install [search]      Install an exact skill id, or use -i/--interactive
   uninstall [search]    Uninstall an exact skill id
+  restore               Restore global installs from installed.json
   update                Update installed skills
   source <cmd>          Manage sources
   target <cmd>          Manage targets
@@ -136,6 +139,8 @@ Source Commands:
   ki source list                                   List all sources
   ki source sync [name]                            Sync all sources or a specific source
   ki source skills [name]                          List skills in a specific source
+  ki source install <name>                         Install all skills from a source
+  ki source uninstall <name>                       Uninstall installed skills from a source
   ki source enable <name>                          Enable a source
   ki source disable <name>                         Disable a source
 
@@ -174,6 +179,8 @@ Source commands:
   ki source list                           List all sources
   ki source sync [name]                    Sync all sources or a specific source
   ki source skills [name]                  List skills in a specific source
+  ki source install <name>                 Install all skills from a source
+  ki source uninstall <name>               Uninstall installed skills from a source
   ki source enable <name>                  Enable a source
   ki source disable <name>                 Disable a source
 
@@ -250,17 +257,39 @@ export async function run(
       await deps.commands.runDoctor(config)
       return
 
+    case 'reconcile':
+      if ((await deps.commands.reconcileInstallations(config)) === false) {
+        deps.exit(1)
+      }
+      return
+
+    case 'repair':
+      if ((await deps.commands.repairInstalledIndex(config, flags)) === false) {
+        deps.exit(1)
+      }
+      return
+
     case 'install':
-      await deps.commands.installSkill(config, flags)
+      if ((await deps.commands.installSkill(config, flags)) === false) {
+        deps.exit(1)
+      }
       return
 
     case 'uninstall':
     case 'remove':
-      await deps.commands.uninstallSkill(flags)
+      if ((await deps.commands.uninstallSkill(flags)) === false) {
+        deps.exit(1)
+      }
       return
 
     case 'update':
       await deps.commands.updateSkills(config, flags)
+      return
+
+    case 'restore':
+      if ((await deps.commands.restoreInstallations(config, flags)) === false) {
+        deps.exit(1)
+      }
       return
 
     case 'source': {
@@ -280,7 +309,16 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceAdd(config, sourceUrl, explicitName, flags)
+          if (
+            (await deps.commands.sourceAdd(
+              config,
+              sourceUrl,
+              explicitName,
+              flags,
+            )) === false
+          ) {
+            deps.exit(1)
+          }
           return
         }
 
@@ -292,7 +330,11 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceSet(config, sourceName, flags)
+          if (
+            (await deps.commands.sourceSet(config, sourceName, flags)) === false
+          ) {
+            deps.exit(1)
+          }
           return
         }
 
@@ -304,7 +346,12 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceUnset(config, sourceName, flags)
+          if (
+            (await deps.commands.sourceUnset(config, sourceName, flags)) ===
+            false
+          ) {
+            deps.exit(1)
+          }
           return
         }
 
@@ -316,7 +363,9 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceShow(config, sourceName)
+          if ((await deps.commands.sourceShow(config, sourceName)) === false) {
+            deps.exit(1)
+          }
           return
         }
 
@@ -328,22 +377,74 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceRemove(config, sourceName)
+          if (
+            (await deps.commands.sourceRemove(config, sourceName)) === false
+          ) {
+            deps.exit(1)
+          }
           return
         }
 
         case 'list':
         case 'ls':
-          await deps.commands.sourceList(config)
+          if ((await deps.commands.sourceList(config)) === false) {
+            deps.exit(1)
+          }
           return
 
         case 'sync':
-          await deps.commands.sourceSync(config, positionals[1])
+          if (
+            (await deps.commands.sourceSync(config, positionals[1])) === false
+          ) {
+            deps.exit(1)
+          }
           return
 
         case 'skills':
-          await deps.commands.sourceSkills(config, positionals[1], flags)
+          if (
+            (await deps.commands.sourceSkills(
+              config,
+              positionals[1],
+              flags,
+            )) === false
+          ) {
+            deps.exit(1)
+          }
           return
+
+        case 'install': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          if (
+            (await deps.commands.sourceInstall(config, sourceName, flags)) ===
+            false
+          ) {
+            deps.exit(1)
+          }
+          return
+        }
+
+        case 'uninstall': {
+          const sourceName = positionals[1]
+          if (!sourceName) {
+            deps.error('Please specify a source name')
+            deps.exit(1)
+            return
+          }
+
+          if (
+            (await deps.commands.sourceUninstall(config, sourceName, flags)) ===
+            false
+          ) {
+            deps.exit(1)
+          }
+          return
+        }
 
         case 'enable': {
           const sourceName = positionals[1]
@@ -353,7 +454,11 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceEnable(config, sourceName)
+          if (
+            (await deps.commands.sourceEnable(config, sourceName)) === false
+          ) {
+            deps.exit(1)
+          }
           return
         }
 
@@ -365,7 +470,11 @@ export async function run(
             return
           }
 
-          await deps.commands.sourceDisable(config, sourceName)
+          if (
+            (await deps.commands.sourceDisable(config, sourceName)) === false
+          ) {
+            deps.exit(1)
+          }
           return
         }
 

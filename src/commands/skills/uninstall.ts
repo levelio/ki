@@ -1,4 +1,4 @@
-import * as p from '@clack/prompts'
+import { isSkillInstalledInTarget } from '../../installations'
 import {
   type InstalledRecord,
   filterInstalledRecordsByScope,
@@ -9,9 +9,10 @@ import {
 } from '../../installed'
 import { targetRegistry } from '../../targets'
 import type { CliFlags } from '../../types'
+import * as p from '../../ui'
 import { selectUninstallRecords, selectUninstallTargets } from './select'
 
-export async function uninstallSkill(flags: CliFlags) {
+export async function uninstallSkill(flags: CliFlags): Promise<boolean> {
   const searchQuery = flags._?.[0]
   const interactive = Boolean(flags.interactive)
   const currentProjectPath = process.cwd()
@@ -23,7 +24,7 @@ export async function uninstallSkill(flags: CliFlags) {
       'Interactive uninstall is not supported. Use an exact skill id, target, and scope.',
     )
     p.outro('Failed')
-    return
+    return false
   }
 
   const installed = await loadInstalled()
@@ -31,7 +32,7 @@ export async function uninstallSkill(flags: CliFlags) {
   if (installed.length === 0) {
     p.note('No skills installed')
     p.outro('Done')
-    return
+    return true
   }
 
   let filtered = filterInstalledRecordsByScope(
@@ -44,7 +45,7 @@ export async function uninstallSkill(flags: CliFlags) {
       'Non-interactive uninstall requires an exact skill id, target, and scope.',
     )
     p.outro('Failed')
-    return
+    return false
   }
 
   const exactMatches = filtered.filter((r) => r.id === searchQuery)
@@ -55,7 +56,7 @@ export async function uninstallSkill(flags: CliFlags) {
       `Non-interactive uninstall requires an exact skill id. No installed skill matches: ${searchQuery}`,
     )
     p.outro('Failed')
-    return
+    return false
   }
 
   const selectedRecords = await selectUninstallRecords(filtered)
@@ -64,7 +65,7 @@ export async function uninstallSkill(flags: CliFlags) {
       'Non-interactive uninstall requires exactly one matching installation. Use an exact skill id and add --global or run from the target project with --project.',
     )
     p.outro('Failed')
-    return
+    return false
   }
 
   const targets = await selectUninstallTargets(selectedRecords, flags)
@@ -73,12 +74,13 @@ export async function uninstallSkill(flags: CliFlags) {
       'Non-interactive uninstall requires an explicit target when a matching installation exists in multiple targets. Use -t or --target.',
     )
     p.outro('Failed')
-    return
+    return false
   }
 
   const spinner = p.spinner()
   spinner.start('Uninstalling...')
   const removedTargetsByRecord = new Map<string, Set<string>>()
+  let hadFailures = false
 
   for (const record of selectedRecords) {
     const recordKey = getRecordKey(record)
@@ -107,6 +109,19 @@ export async function uninstallSkill(flags: CliFlags) {
 
       try {
         await target.uninstall(skillId, installOptions)
+        const stillInstalled = await isSkillInstalledInTarget(
+          target,
+          skillId,
+          installOptions,
+        )
+        if (stillInstalled) {
+          hadFailures = true
+          p.log.warn(
+            `Uninstall verification failed for ${skillId} on ${targetName}: target still reports the skill as installed`,
+          )
+          continue
+        }
+
         let removedTargets = removedTargetsByRecord.get(recordKey)
         if (!removedTargets) {
           removedTargets = new Set<string>()
@@ -114,6 +129,7 @@ export async function uninstallSkill(flags: CliFlags) {
         }
         removedTargets.add(targetName)
       } catch {
+        hadFailures = true
         p.log.warn(`Failed to remove from ${targetName}`)
       }
     }
@@ -137,6 +153,13 @@ export async function uninstallSkill(flags: CliFlags) {
 
   await saveInstalled(newInstalled)
 
+  if (hadFailures) {
+    spinner.stop('Uninstall completed with errors')
+    p.outro('Failed')
+    return false
+  }
+
   spinner.stop('Done')
   p.outro(`Uninstalled ${selectedRecords.length} installation(s)`)
+  return true
 }

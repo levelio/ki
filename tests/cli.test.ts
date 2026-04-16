@@ -10,17 +10,22 @@ function createCommands() {
     initConfig: mock(async () => {}),
     installSkill: mock(async () => {}),
     listSkills: mock(async () => {}),
+    reconcileInstallations: mock(async () => {}),
+    repairInstalledIndex: mock(async () => {}),
+    restoreInstallations: mock(async () => {}),
     searchSkills: mock(async () => {}),
     showStatus: mock(async () => {}),
     sourceAdd: mock(async () => {}),
     sourceDisable: mock(async () => {}),
     sourceEnable: mock(async () => {}),
+    sourceInstall: mock(async () => {}),
     sourceList: mock(async () => {}),
     sourceRemove: mock(async () => {}),
     sourceSet: mock(async () => {}),
     sourceShow: mock(async () => {}),
     sourceSkills: mock(async () => {}),
     sourceSync: mock(async () => {}),
+    sourceUninstall: mock(async () => {}),
     sourceUnset: mock(async () => {}),
     targetList: mock(async () => {}),
     uninstallSkill: mock(async () => {}),
@@ -162,6 +167,23 @@ describe('cli', () => {
     })
   })
 
+  it('exits with code 1 when install reports command failure', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+    const exit = mock(() => {})
+    commands.installSkill.mockResolvedValue(false)
+
+    await run(['install', 'source:alpha', '--target', 'codex'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit,
+    })
+
+    expect(exit).toHaveBeenCalledWith(1)
+  })
+
   it('routes update with dry-run flag', async () => {
     const commands = createCommands()
     const config = createConfig()
@@ -226,6 +248,57 @@ describe('cli', () => {
     })
 
     expect(commands.runDoctor).toHaveBeenCalledWith(config)
+  })
+
+  it('routes reconcile without extra flags', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['reconcile'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.reconcileInstallations).toHaveBeenCalledWith(config)
+  })
+
+  it('routes repair with parsed flags', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['repair', '--dry-run'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.repairInstalledIndex).toHaveBeenCalledWith(config, {
+      _: [],
+      'dry-run': true,
+    })
+  })
+
+  it('routes restore with source filter', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['restore', '--source', 'source'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.restoreInstallations).toHaveBeenCalledWith(config, {
+      _: [],
+      source: 'source',
+    })
   })
 
   it('reports missing source names for source enable', async () => {
@@ -372,6 +445,42 @@ describe('cli', () => {
     })
 
     expect(commands.sourceRemove).toHaveBeenCalledWith(config, 'source')
+  })
+
+  it('routes source install', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['source', 'install', 'source', '--target', 'codex,cursor'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.sourceInstall).toHaveBeenCalledWith(config, 'source', {
+      _: ['install', 'source'],
+      target: 'codex,cursor',
+    })
+  })
+
+  it('routes source uninstall', async () => {
+    const commands = createCommands()
+    const config = createConfig()
+
+    await run(['source', 'uninstall', 'source', '--target', 'codex'], {
+      commands,
+      loadConfig: mock(async () => config),
+      log: mock(() => {}),
+      error: mock(() => {}),
+      exit: mock(() => {}),
+    })
+
+    expect(commands.sourceUninstall).toHaveBeenCalledWith(config, 'source', {
+      _: ['uninstall', 'source'],
+      target: 'codex',
+    })
   })
 
   it('shows source subcommand help for unknown source actions', async () => {

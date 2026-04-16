@@ -20,7 +20,7 @@ describe('config loader helpers', () => {
     ])
   })
 
-  it('mergeConfig preserves defaults while applying user overrides', () => {
+  it('mergeConfig merges matching defaults but treats explicit sections as authoritative', () => {
     const merged = mergeConfig(DEFAULT_CONFIG, {
       sources: [
         { name: 'superpowers', enabled: false },
@@ -63,9 +63,58 @@ describe('config loader helpers', () => {
     })
     expect(
       merged.targets.find((target) => target.name === 'claude-code'),
-    ).toEqual({
-      name: 'claude-code',
-      enabled: true,
+    ).toBeUndefined()
+    expect(
+      merged.sources.find((source) => source.name === 'ki'),
+    ).toBeUndefined()
+  })
+
+  it('mergeConfig does not re-add removed default entries when the section is explicitly present', () => {
+    const merged = mergeConfig(DEFAULT_CONFIG, {
+      sources: [
+        {
+          name: 'ki',
+          provider: 'git',
+          url: 'https://github.com/levelio/ki.git',
+          enabled: true,
+        },
+      ],
+      targets: [
+        { name: 'codex', enabled: true },
+        { name: 'cursor', enabled: true },
+      ],
     })
+
+    expect(merged.sources.map((source) => source.name)).toEqual(['ki'])
+    expect(merged.targets.map((target) => target.name)).toEqual([
+      'codex',
+      'cursor',
+    ])
+    expect(
+      merged.sources.find((source) => source.name === 'superpowers'),
+    ).toBeUndefined()
+    expect(
+      merged.targets.find((target) => target.name === 'claude-code'),
+    ).toBeUndefined()
+  })
+
+  it('mergeConfig falls back to defaults for omitted sections', () => {
+    const merged = mergeConfig(DEFAULT_CONFIG, {
+      sources: [
+        {
+          name: 'ki',
+          provider: 'git',
+          url: 'https://github.com/levelio/ki.git',
+          enabled: false,
+        },
+      ],
+    })
+
+    expect(merged.sources).toHaveLength(1)
+    expect(merged.sources[0]).toMatchObject({
+      name: 'ki',
+      enabled: false,
+    })
+    expect(merged.targets).toEqual(DEFAULT_CONFIG.targets)
   })
 })

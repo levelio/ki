@@ -1,15 +1,14 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import type { Config, TargetConfig } from '@/types'
 import { DEFAULT_CONFIG } from '@/types'
 import type { SourceConfig } from '@/types'
 // src/config/loader.ts
 import { parse, stringify } from 'yaml'
+import { getKiCacheDir, getKiConfigDir, getKiConfigFile } from './paths'
 
-export const CONFIG_DIR = join(homedir(), '.config', 'ki')
-export const CONFIG_FILE = join(CONFIG_DIR, 'config.yaml')
+export const CONFIG_DIR = getKiConfigDir()
+export const CONFIG_FILE = getKiConfigFile()
 
 export interface ConfigOverride {
   sources?: Partial<SourceConfig>[]
@@ -53,8 +52,12 @@ export async function saveConfig(config: Config): Promise<void> {
 
 export function mergeConfig(defaults: Config, user: ConfigOverride): Config {
   return {
-    sources: mergeArrays(defaults.sources, user.sources || [], 'name'),
-    targets: mergeArrays(defaults.targets, user.targets || [], 'name'),
+    sources: user.sources
+      ? mergeArrays(defaults.sources, user.sources, 'name')
+      : [...defaults.sources],
+    targets: user.targets
+      ? mergeArrays(defaults.targets, user.targets, 'name')
+      : [...defaults.targets],
   }
 }
 
@@ -70,31 +73,23 @@ export function mergeArrays<T extends { name: string }>(
   user: Partial<T>[],
   key: keyof T,
 ): T[] {
-  const result = [...defaults]
   const validUserItems = user.filter(
     (item): item is Partial<T> & Pick<T, typeof key> => hasStringKey(item, key),
   )
-  const userMap = new Map(validUserItems.map((item) => [item[key], item]))
+  const defaultsByKey = new Map(defaults.map((item) => [item[key], item]))
 
-  for (const [name, userItem] of userMap) {
-    const defaultIndex = result.findIndex((item) => item[key] === name)
-
-    if (defaultIndex >= 0) {
-      // Merge with default
-      result[defaultIndex] = { ...result[defaultIndex], ...userItem } as T
-    } else {
-      // Add new item (need to ensure required fields exist)
-      result.push(userItem as T)
-    }
-  }
-
-  return result
+  return validUserItems.map((userItem) => {
+    const defaultItem = defaultsByKey.get(userItem[key])
+    return defaultItem
+      ? ({ ...defaultItem, ...userItem } as T)
+      : (userItem as T)
+  })
 }
 
 export function getConfigDir(): string {
-  return CONFIG_DIR
+  return getKiConfigDir()
 }
 
 export function getCacheDir(): string {
-  return join(CONFIG_DIR, 'cache')
+  return getKiCacheDir()
 }

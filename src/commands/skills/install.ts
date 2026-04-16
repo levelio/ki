@@ -1,4 +1,4 @@
-import * as p from '@clack/prompts'
+import { isSkillInstalledInTarget } from '../../installations'
 import {
   type InstalledRecord,
   findInstalledRecordIndex,
@@ -9,6 +9,7 @@ import {
 import { providerRegistry } from '../../providers'
 import { targetRegistry } from '../../targets'
 import type { CliFlags, Config, InstallOptions } from '../../types'
+import * as p from '../../ui'
 import { selectInstallSkillIds, selectInstallTargets } from './select'
 import {
   findSkillSourceConfig,
@@ -19,7 +20,7 @@ import {
 export async function installSkill(
   config: Pick<Config, 'sources' | 'targets'>,
   flags: CliFlags,
-) {
+): Promise<boolean> {
   const searchQuery = flags._?.[0]
   const interactive = Boolean(flags.interactive)
   const dryRun = Boolean(flags['dry-run'])
@@ -31,7 +32,7 @@ export async function installSkill(
       'Interactive mode requires a TTY. Use ki search to find an exact skill id, then run ki install without -i/--interactive.',
     )
     p.outro('Failed')
-    return
+    return false
   }
 
   const enabledSources = getEnabledSources(config)
@@ -40,7 +41,7 @@ export async function installSkill(
   if (skills.length === 0) {
     p.note('No skills available. Add sources first.')
     p.outro('Done')
-    return
+    return true
   }
 
   let filteredSkills = skills
@@ -60,7 +61,7 @@ export async function installSkill(
       if (filteredSkills.length === 0) {
         p.log.error(`No skills matching: ${searchQuery}`)
         p.outro('Failed')
-        return
+        return false
       }
     }
   }
@@ -73,7 +74,7 @@ export async function installSkill(
   if (!skillIds) {
     if (interactive) {
       p.outro('Cancelled')
-      return
+      return false
     }
 
     if (searchQuery) {
@@ -86,7 +87,7 @@ export async function installSkill(
       )
     }
     p.outro('Failed')
-    return
+    return false
   }
 
   const targets = await selectInstallTargets(config.targets, flags, interactive)
@@ -99,14 +100,27 @@ export async function installSkill(
       )
       p.outro('Failed')
     }
-    return
+    return false
   }
-  if (targets.length === 0) {
+  const normalizedTargets = [
+    ...new Set(targets.map((target) => target.trim())),
+  ].filter(Boolean)
+
+  if (normalizedTargets.length === 0) {
     p.log.error(
       'No enabled targets. Specify with -t or enable targets in config.',
     )
     p.outro('Failed')
-    return
+    return false
+  }
+
+  const invalidTargets = normalizedTargets.filter(
+    (targetName) => !targetRegistry.get(targetName),
+  )
+  if (invalidTargets.length > 0) {
+    p.log.error(`Unknown target(s): ${invalidTargets.join(', ')}`)
+    p.outro('Failed')
+    return false
   }
 
   const scope: 'global' | 'project' = flags.project ? 'project' : 'global'
@@ -119,12 +133,12 @@ export async function installSkill(
     console.log('')
     for (const skillId of skillIds) {
       console.log(
-        `  Would install ${skillId} (${formatTargetsAtLocation(targets, installLocation)})`,
+        `  Would install ${skillId} (${formatTargetsAtLocation(normalizedTargets, installLocation)})`,
       )
     }
     console.log('')
     p.outro(`Dry run: ${skillIds.length} skill instance(s) would be installed`)
-    return
+    return true
   }
 
   const spinner = p.spinner()
@@ -133,10 +147,15 @@ export async function installSkill(
   const installed = await loadInstalled()
   let installedCount = 0
   let installedTargetCount = 0
+  let hadFailures = false
 
   for (const skillId of skillIds) {
     const skill = skills.find((s) => s.id === skillId)
-    if (!skill) continue
+    if (!skill) {
+      hadFailures = true
+      p.log.warn(`Skipped ${skillId}: skill metadata not found`)
+      continue
+    }
 
     spinner.message(`Installing ${skillId}...`)
 
@@ -150,14 +169,32 @@ export async function installSkill(
     const content = await providerRegistry.fetchContent(skill, sourceConfig)
     const successfulTargets: string[] = []
 
-    for (const targetName of targets) {
+    for (const targetName of normalizedTargets) {
       const target = targetRegistry.get(targetName)
-      if (!target) continue
+      if (!target) {
+        hadFailures = true
+        p.log.warn(`Skipped ${skillId}: target not found: ${targetName}`)
+        continue
+      }
 
       try {
         await target.install(content, installOptions)
+        const verified = await isSkillInstalledInTarget(
+          target,
+          skillId,
+          installOptions,
+        )
+        if (!verified) {
+          hadFailures = true
+          p.log.warn(
+            `Install verification failed for ${skillId} on ${targetName}: target did not report the skill after install`,
+          )
+          continue
+        }
+
         successfulTargets.push(targetName)
       } catch (error) {
+        hadFailures = true
         p.log.warn(
           `Failed to install ${skillId} to ${targetName}: ${getErrorMessage(error)}`,
         )
@@ -165,6 +202,7 @@ export async function installSkill(
     }
 
     if (successfulTargets.length === 0) {
+      hadFailures = true
       p.log.warn(
         `Skipped recording ${skillId}: no targets installed successfully`,
       )
@@ -214,8 +252,17 @@ export async function installSkill(
 
   await saveInstalled(installed)
 
+  if (hadFailures) {
+    spinner.stop(
+      `Installed ${installedCount} skill instance(s) to ${installedTargetCount} target(s) with errors`,
+    )
+    p.outro('Failed')
+    return false
+  }
+
   spinner.stop(
     `Installed ${installedCount} skill instance(s) to ${installedTargetCount} target(s) in ${scope}`,
   )
   p.outro('Done')
+  return true
 }

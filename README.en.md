@@ -24,6 +24,7 @@ English | [简体中文](./README.md)
 - 🎯 Multi-target installation across AI tools
 - 🔍 Interactive search and multi-select install flow
 - 🔄 Update installed skills
+- 🩺 Reconcile drift, repair the installed index, and restore global installs
 - 📁 Multiple skill directories per source
 - ⚙️ Configure source `branch`, `skillsPath`, `structure`, and `skillFile` through the CLI
 
@@ -31,6 +32,14 @@ English | [简体中文](./README.md)
 
 - Node.js 20+
 - npm
+
+## Platform Support
+
+- macOS: supported
+- Linux: supported
+- Windows: experimental support
+
+The current Windows work focuses on platform-aware config/cache directories and safer target installation behavior, but it has not yet been fully validated in a real Windows environment.
 
 ## Installation
 
@@ -123,6 +132,7 @@ If you want to preview changes without writing:
 ```bash
 ki install superpowers:brainstorming -t codex --project --dry-run
 ki update --dry-run
+ki repair --dry-run
 ```
 
 If you want to explicitly enter the TUI flow:
@@ -160,6 +170,12 @@ ki source sync acme
 # Inspect the skills provided by this source
 ki source skills acme
 
+# Install every skill from this source into the specified targets
+ki source install acme -t codex,cursor
+
+# Uninstall all installed skills from this source for the specified target
+ki source uninstall acme -t codex --global
+
 # Show the source config, effective values, and resolved paths
 ki source show acme
 
@@ -193,7 +209,44 @@ Notes:
 - `ki source add` and `ki source set` can configure `branch`, `skillsPath`, `structure`, and `skillFile`
 - `ki source add --disabled` creates a source in the disabled state, and `ki source set --enable/--disable` toggles it later
 - when adding a local source, the path must already exist and be a directory
+- `ki source install <name> -t <targets>` installs every skill from a source into the specified targets
+- `ki source uninstall <name> -t <targets>` uninstalls installed skills from a source for the specified targets
 - `ki source remove` removes source config only; it does not uninstall skills that were installed from that source
+
+## Installed Index Maintenance
+
+`ki` now treats the target filesystem as the real installation state, and the installed index file as a verifiable ledger.
+
+Default locations:
+
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/ki/installed.json`
+- macOS: `~/.config/ki/installed.json`
+- Windows: `%APPDATA%\\ki\\installed.json`
+
+Common commands:
+
+```bash
+# Read-only reconciliation between installed.json and target state
+ki reconcile
+
+# Repair only installed.json entries that no longer exist in targets
+ki repair
+
+# Preview which installed index entries repair would remove
+ki repair --dry-run
+
+# Restore global installs using installed.json + config.yaml
+ki restore
+
+# Restore only one source's global installs
+ki restore --source superpowers
+```
+
+Behavior boundaries:
+
+- `ki reconcile` is read-only
+- `ki repair` updates `installed.json` only; it does not reinstall missing skills and does not remove untracked target artifacts
+- `ki restore` currently restores `global` installs only; it does not remap project paths across machines
 
 ## Command Reference
 
@@ -202,10 +255,13 @@ Notes:
 | `ki init` | Initialize config file |
 | `ki status` | Show enabled sources, targets, and install status |
 | `ki doctor` | Check config and install health |
+| `ki reconcile` | Reconcile `installed.json` against actual target state |
+| `ki repair` | Repair drifted entries in `installed.json` only |
 | `ki search <query>` | Search skills by name or id |
 | `ki list` | List all available skills |
 | `ki install [search]` | In non-interactive mode, requires an exact skill id; when multiple targets are enabled, also requires `-t/--target`; pass `-i/--interactive` to enter the TUI |
 | `ki uninstall [search]` | In non-interactive mode, requires an exact skill id; in most cases also requires `-t/--target` plus `--global` or `--project`; no implicit interaction |
+| `ki restore` | Restore global installs using `installed.json` and the current source config |
 | `ki update` | Update all installed skills |
 | `ki source add <git-url-or-path> [flags]` | Add a Git or local source and optionally set source options at the same time |
 | `ki source set <name> [flags]` | Update an existing source's options or enabled state |
@@ -215,13 +271,19 @@ Notes:
 | `ki source list` | List all sources |
 | `ki source sync [name]` | Sync sources |
 | `ki source skills [name]` | List skills in a source |
+| `ki source install <name>` | Install all skills from a source |
+| `ki source uninstall <name>` | Uninstall installed skills from a source |
 | `ki source enable <name>` | Enable a skill source |
 | `ki source disable <name>` | Disable a skill source |
 | `ki target list` | List all target tools |
 
 ## Configuration
 
-Config file location: `~/.config/ki/config.yaml`
+Config file locations:
+
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/ki/config.yaml`
+- macOS: `~/.config/ki/config.yaml`
+- Windows: `%APPDATA%\\ki\\config.yaml`
 
 In common cases, prefer the CLI for source management:
 

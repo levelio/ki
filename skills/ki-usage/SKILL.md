@@ -7,7 +7,7 @@ description: Use when working with ki CLI to manage skill sources, inspect avail
 
 本技能面向会直接调用命令的 Agent。
 
-目标：让 Agent 优先通过 `ki` CLI 完成 source 管理、source 配置、skill 安装/卸载、状态检查和诊断；只有在 CLI 无法覆盖时，才手动检查或修改配置文件。
+目标：让 Agent 通过 `ki` CLI 完成 source 管理、source 配置、skill 安装/卸载、状态检查和诊断。对用户要求的 source 管理和安装任务，不允许用手动修改配置或手动复制文件来绕过 CLI。
 
 ## Agent 执行约定
 
@@ -20,6 +20,18 @@ description: Use when working with ki CLI to manage skill sources, inspect avail
 - 需要只作用于当前仓库时，显式传入 `--project`。
 - 需要只看计划不写入时，使用 `--dry-run`。
 - 参数不够精确时，先查询，再执行安装或卸载；不要默认触发交互式选择。
+
+## 严格禁止的替代做法
+
+对下面这几类用户任务，Agent 不能用手工文件操作来模拟成功：
+
+- 不能手动编辑 `~/.config/ki/config.yaml` 来代替 `ki source add`、`ki source set`、`ki source unset`、`ki source enable`、`ki source disable`、`ki source remove`。
+- 不能手动编辑 `~/.config/ki/installed.json` 来代替 `ki install`、`ki uninstall`、`ki update`。
+- 不能手动编辑 `~/.config/ki/installed.json` 来代替 `ki install`、`ki uninstall`、`ki update`、`ki repair`、`ki restore`。
+- 不能直接把 skill 文件或目录复制、软链接到 target 目录，例如 `~/.claude/skills/`、`~/.agents/skills/`、`~/.cursor/skills/`，来代替 `ki install`。
+- 不能在 CLI 安装失败后，靠手工改配置或手工复制文件把结果补出来，然后向用户报告安装成功。
+
+允许手动查看这些文件做诊断，但诊断结束后，真正的修复动作仍应回到 `ki` CLI；如果 CLI 本身有 bug，应报告 bug 或修 CLI，而不是绕过 CLI 完成用户任务。
 
 ## 非交互优先原则
 
@@ -35,6 +47,13 @@ Agent 默认不要进入交互式选择界面。以下情况不要直接执行 `
 1. 先用只读命令确认现状，例如 `ki status`、`ki target list`、`ki search <query>`、`ki source skills <name>`。
 2. 拿到精确 `skill id`、`target`、`scope` 后，再执行非交互命令。
 3. 只有用户明确要求交互式选择时，才允许在 `ki install` 上使用 `-i` 或 `--interactive`。
+
+如果非交互命令失败：
+
+1. 先保留失败现场和命令输出。
+2. 再用 `ki status`、`ki doctor`、`ki source show <name>`、`ki source skills <name>` 继续诊断。
+3. 如果确认是 `ki` 的实现 bug，应该修 `ki` 或明确向用户报告失败原因。
+4. 不要通过手改配置或手动复制文件来伪造一个成功安装的最终状态。
 
 明确避免以下写法：
 
@@ -93,12 +112,15 @@ npm run dev --
 | `ki init` | 初始化默认配置 |
 | `ki status` | 查看当前 source、target 和安装状态 |
 | `ki doctor` | 检查配置和安装记录问题，并给出修复建议 |
+| `ki reconcile` | 对账 `installed.json` 和 target 实际状态 |
+| `ki repair` | 只修复 `installed.json` 里的失真索引 |
 | `ki search <query>` | 搜索 skill |
 | `ki list` | 列出可用 skill |
 | `ki install <skill-id> -t <target>` | 非交互安装 |
 | `ki install [query] -i` | 显式进入安装 TUI |
 | `ki uninstall <skill-id> -t <target> --global` | 非交互卸载全局安装 |
 | `ki uninstall <skill-id> -t <target> --project` | 非交互卸载当前项目安装 |
+| `ki restore` | 根据 `installed.json` 和 source 配置恢复全局安装 |
 | `ki update` | 更新已安装 skill |
 | `ki source add <git-url-or-path> [flags]` | 添加 source，并可同时设置 source options |
 | `ki source set <name> [flags]` | 修改 source options 或启用状态 |
@@ -107,6 +129,8 @@ npm run dev --
 | `ki source list` | 查看 source |
 | `ki source sync [name]` | 同步 source |
 | `ki source skills [name]` | 查看 source 中的 skill |
+| `ki source install <name> -t <targets>` | 安装某个 source 下的全部技能 |
+| `ki source uninstall <name> -t <targets>` | 卸载某个 source 下已安装的全部技能 |
 | `ki source enable <name>` | 启用 source |
 | `ki source disable <name>` | 禁用 source |
 | `ki source remove <name>` | 删除 source |
@@ -163,6 +187,8 @@ ki source show acme
 ki source list
 ki source sync acme
 ki source skills acme
+ki source install acme -t codex,cursor
+ki source uninstall acme -t codex --global
 ki search brainstorming
 ```
 
@@ -201,6 +227,11 @@ ki uninstall acme:brainstorming -t codex --project
 ```bash
 ki source disable acme
 ki source enable acme
+ki reconcile
+ki repair --dry-run
+ki repair
+ki restore
+ki restore --source acme
 
 # 删除 source 前，先卸载该 source 已安装的 skill
 # 例如：
@@ -209,6 +240,12 @@ ki source enable acme
 # ki doctor
 ki source remove acme
 ```
+
+说明：
+
+- `ki reconcile` 只读，不写入任何文件。
+- `ki repair` 只修复 `installed.json`，不会自动重装 skill，也不会自动删除 target 里的孤儿安装。
+- `ki restore` 第一版只恢复 `global` 安装；如果用户要求跨机器恢复项目安装，不要自行假设路径映射，先说明限制。
 
 ## Agent 标准操作模板
 
@@ -223,6 +260,11 @@ ki source add <git-url-or-path> --name <source-name>
 ki source sync <source-name>
 ki source skills <source-name>
 ```
+
+约束：
+
+- 这三个步骤必须真的通过 `ki` CLI 执行完成。
+- 如果 `ki source add` 或 `ki source sync` 失败，不要改写 `config.yaml` 来跳过它。
 
 如果用户已经知道目录结构，可直接：
 
@@ -276,6 +318,34 @@ ki install <skill-id> -t <target> --project --dry-run
 - `skill-id` 必须是完整 id，例如 `ki:ki-usage`，不要只传关键词。
 - 对 Agent 来说，`-t <target>` 最好显式给出，不要依赖默认 target 选择。
 - 如果用户明确要求交互式选择，才使用 `ki install -i` 或 `ki install <query> -i`。
+- 安装结果必须由 `ki install` 自己完成写入和落地；不要手工创建 target 目录内容。
+- 安装后应用 `ki status`、`ki source skills <source-name>`、必要时再检查 target 目录，做只读验证。
+
+### 模板 3A：安装某个 source 下的全部技能
+
+适用：用户明确要求“把某个 source 的全部 skill 装到一个或多个 target”。
+
+```bash
+ki source install <source-name> -t <target-list>
+```
+
+项目安装：
+
+```bash
+ki source install <source-name> -t <target-list> --project
+```
+
+预览：
+
+```bash
+ki source install <source-name> -t <target-list> --project --dry-run
+```
+
+约束：
+
+- `source-name` 必须是精确 source 名称。
+- `-t <target-list>` 应显式给出，不要依赖默认 target 选择。
+- 执行前先用 `ki source skills <source-name>` 确认该 source 下的 skill 列表。
 
 ### 模板 4：非交互卸载
 
@@ -299,6 +369,28 @@ ki uninstall <skill-id> -t <target> --project
 - 如果不确定作用域，先执行 `ki status`，不要直接卸载。
 - 不要使用 `ki uninstall <query>` 这类模糊命令；多匹配时非交互会失败。
 
+### 模板 4A：卸载某个 source 下的全部技能
+
+适用：用户要把某个 source 当前已安装的 skill 按 target 批量移除。
+
+全局卸载：
+
+```bash
+ki source uninstall <source-name> -t <target-list> --global
+```
+
+项目卸载：
+
+```bash
+ki source uninstall <source-name> -t <target-list> --project
+```
+
+约束：
+
+- `source-name` 必须是精确 source 名称。
+- `-t <target-list>` 应显式给出。
+- 如果不确定当前有哪些安装记录，先执行 `ki status`。
+
 ### 模板 5：先诊断再修复
 
 适用：用户说“不能用”“装了但没生效”“帮我修一下 ki 配置”。
@@ -311,7 +403,7 @@ ki doctor
 
 - 优先执行 `doctor` 输出里的 `Fix:`
 - 优先用 CLI 修复，例如 `ki source set`、`ki source unset`、`ki source enable`
-- 只有在 `doctor` 和 CLI 都无法覆盖时，才人工检查配置和安装记录
+- 可以人工检查配置和安装记录来诊断，但不要把手工编辑这些文件当成对用户任务的最终修复动作
 
 ### 模板 6：先看现状再操作
 
@@ -405,7 +497,7 @@ ki doctor
 - 恢复使用：`ki source enable <name>`
 - 删除：`ki source remove <name>`
 
-优先用 CLI 完成这些动作；只有在 CLI 还不能表达某个配置时，才回退到直接编辑 `~/.config/ki/config.yaml`。
+优先用 CLI 完成这些动作；对于正常的 source 生命周期管理，不要回退到直接编辑 `~/.config/ki/config.yaml`。
 
 启用状态也优先走 CLI：
 
@@ -441,7 +533,7 @@ ki doctor
 2. 再执行 `ki source sync <name>`。
 3. 然后检查 `~/.config/ki/cache/` 下该 source 的缓存仓库目录。
 4. 基于缓存仓库的真实目录结构，判断应该设置的 `options.skillsPath`、`options.structure`、`options.skillFile`，必要时补 `options.branch`。
-5. 优先用 `ki source set <name> ...flags...` 更新 source；只有 CLI 无法覆盖时，再手动改 `~/.config/ki/config.yaml`。
+5. 优先用 `ki source set <name> ...flags...` 更新 source；不要把手动改 `~/.config/ki/config.yaml` 当成正常完成路径。
 6. 再次执行 `ki source sync <name>` 和 `ki source skills <name>` 验证。
 
 Agent 不要为了分析 skill 目录结构，额外把同一个 Git 仓库 clone 到业务项目目录里。
@@ -462,6 +554,26 @@ Agent 不要为了分析 skill 目录结构，额外把同一个 Git 仓库 clon
 ki source sync acme
 ki source skills acme
 ```
+
+### 从 GitHub URL 接入并安装 skill
+
+适用：用户给出一个 GitHub 仓库地址，希望接入为 source 并安装其中的 skill。
+
+标准顺序：
+
+```bash
+ki source add <git-url> --name <source-name>
+ki source sync <source-name>
+ki source skills <source-name>
+ki install <source-name>:<skill-name> -t <target>
+ki status
+```
+
+约束：
+
+- 先把 source 接入并验证可发现的 skill，再执行安装。
+- 如果 `ki source skills <source-name>` 没看到目标 skill，先诊断 source options，不要直接复制 skill 文件到 target 目录。
+- 如果 `ki install` 失败，先保留失败输出并继续诊断，不要改写 target 目录来伪造安装结果。
 
 ### 只看已安装 skill
 
@@ -657,7 +769,7 @@ ki source set acme --enable
 - 如果 CLI 能表达，就优先 `ki source add`、`ki source set`、`ki source unset`、`ki source show`。
 - 修改后必须用 `ki source sync <name>` 和 `ki source skills <name>` 验证结果。
 - 如果仓库默认分支不是 `main`，再补 `--branch`；不要无依据修改 branch。
-- 只有在 CLI 无法覆盖时，才手动编辑 `config.yaml`，并且只改目标 source 对应的配置块。
+- 手动编辑 `config.yaml` 仅限于定位 `ki` 自身 bug 时的临时诊断，不应作为安装或配置任务的交付结果。
 
 ## 技能目录结构
 

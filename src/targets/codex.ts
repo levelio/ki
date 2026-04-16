@@ -30,6 +30,10 @@ export class CodexTarget implements Target {
     return join(projectPath, '.agents', 'skills')
   }
 
+  resolveInstalledId(skillId: string): string {
+    return this.getSkillName(skillId)
+  }
+
   async install(skill: SkillContent, options?: InstallOptions): Promise<void> {
     const basePath =
       options?.scope === 'project' && options.projectPath
@@ -68,6 +72,20 @@ export class CodexTarget implements Target {
     }
 
     await rm(skillDir, { recursive: true, force: true })
+  }
+
+  async isInstalled(
+    skillId: string,
+    options?: InstallOptions,
+  ): Promise<boolean> {
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
+
+    const skillDir = join(basePath, this.getSkillName(skillId))
+    const skillFile = join(skillDir, 'SKILL.md')
+    return existsSync(skillFile)
   }
 
   async list(

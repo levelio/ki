@@ -30,6 +30,7 @@
 - 🎯 多目标安装，支持安装到多个 AI 工具
 - 🔍 交互式搜索与多选安装
 - 🔄 更新已安装技能
+- 🩺 对账、修复安装索引，并恢复全局安装
 - 📁 单个源支持多个技能目录
 - ⚙️ 通过 CLI 配置 source 的 `branch`、`skillsPath`、`structure`、`skillFile`
 
@@ -37,6 +38,14 @@
 
 - Node.js 20+
 - npm
+
+## 平台支持
+
+- macOS：支持
+- Linux：支持
+- Windows：实验性支持
+
+当前 Windows 适配重点包括平台化的配置/缓存目录解析，以及 target 安装时的更保守文件写入策略；但还没有在真实 Windows 环境下做完整回归验证。
 
 ## 安装
 
@@ -129,6 +138,7 @@ ki install superpowers:brainstorming -t codex --project
 ```bash
 ki install superpowers:brainstorming -t codex --project --dry-run
 ki update --dry-run
+ki repair --dry-run
 ```
 
 如果你希望显式进入 TUI 选择模式：
@@ -166,6 +176,12 @@ ki source sync acme
 # 查看这个源里有哪些技能
 ki source skills acme
 
+# 安装这个源里的全部技能到指定 target
+ki source install acme -t codex,cursor
+
+# 从指定 target 卸载这个源里的全部已安装技能
+ki source uninstall acme -t codex --global
+
 # 查看 source 的当前配置、生效值和解析后的路径
 ki source show acme
 
@@ -199,7 +215,44 @@ ki source remove acme
 - `ki source add`、`ki source set` 支持直接配置 `branch`、`skillsPath`、`structure`、`skillFile`
 - `ki source add --disabled` 可以直接以禁用状态创建 source，`ki source set --enable/--disable` 可切换启用状态
 - 添加本地目录时，路径必须已经存在，且是一个目录
+- `ki source install <name> -t <targets>` 可以把一个 source 下的全部技能批量安装到指定目标
+- `ki source uninstall <name> -t <targets>` 可以把一个 source 下已安装的技能按目标批量卸载
 - `ki source remove` 只删除 source 配置，不会自动卸载这个 source 已安装的 skill
+
+## 安装索引维护
+
+`ki` 现在把 target 文件系统视为真实安装状态，把安装索引文件视为可校验的安装账本。
+
+默认位置：
+
+- Linux：`${XDG_CONFIG_HOME:-~/.config}/ki/installed.json`
+- macOS：`~/.config/ki/installed.json`
+- Windows：`%APPDATA%\\ki\\installed.json`
+
+常用命令：
+
+```bash
+# 只读对账，检查 installed.json 和 target 是否漂移
+ki reconcile
+
+# 只修复 installed.json 中“索引存在但 target 缺失”的记录
+ki repair
+
+# 预览 repair 会移除哪些索引记录
+ki repair --dry-run
+
+# 根据 installed.json + config.yaml 恢复全局安装
+ki restore
+
+# 只恢复某个 source 的全局安装
+ki restore --source superpowers
+```
+
+边界说明：
+
+- `ki reconcile` 只读，不修改文件
+- `ki repair` 只修复 `installed.json`，不会自动重装 skill，也不会自动删除 target 里的孤儿安装
+- `ki restore` 第一版只恢复 `global` 安装，不做跨机器的项目路径映射
 
 ## 命令参考
 
@@ -208,10 +261,13 @@ ki source remove acme
 | `ki init` | 初始化配置文件 |
 | `ki status` | 查看当前启用的源、目标和安装状态 |
 | `ki doctor` | 检查配置和安装状态是否异常 |
+| `ki reconcile` | 对账 `installed.json` 与 target 实际状态 |
+| `ki repair` | 只修复 `installed.json` 中已失真的安装索引 |
 | `ki search <query>` | 按名称或 ID 搜索技能 |
 | `ki list` | 列出所有可用技能 |
 | `ki install [search]` | 非交互时要求精确 skill id；多 target 场景下还需显式传 `-t/--target`；传 `-i/--interactive` 时进入 TUI |
 | `ki uninstall [search]` | 非交互时要求精确 skill id；通常还需显式传 `-t/--target` 和 `--global` 或 `--project`，不支持隐式交互 |
+| `ki restore` | 根据 `installed.json` 和当前 source 配置恢复全局安装 |
 | `ki update` | 更新所有已安装技能 |
 | `ki source add <git-url-or-path> [flags]` | 添加一个 Git 或本地目录技能源，并可同时设置 source options |
 | `ki source set <name> [flags]` | 更新一个已有 source 的 options 或启用状态 |
@@ -221,13 +277,19 @@ ki source remove acme
 | `ki source list` | 列出所有源 |
 | `ki source sync [name]` | 同步源 |
 | `ki source skills [name]` | 查看源中的技能 |
+| `ki source install <name>` | 安装该 source 下的全部技能 |
+| `ki source uninstall <name>` | 卸载该 source 下已安装的全部技能 |
 | `ki source enable <name>` | 启用一个技能源 |
 | `ki source disable <name>` | 禁用一个技能源 |
 | `ki target list` | 列出所有目标工具 |
 
 ## 配置
 
-配置文件位于 `~/.config/ki/config.yaml`
+配置文件位置：
+
+- Linux：`${XDG_CONFIG_HOME:-~/.config}/ki/config.yaml`
+- macOS：`~/.config/ki/config.yaml`
+- Windows：`%APPDATA%\\ki\\config.yaml`
 
 常见情况下，优先使用 CLI 管理 source：
 

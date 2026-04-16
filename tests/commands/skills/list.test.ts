@@ -6,6 +6,19 @@ const mock = vi.fn
 
 const originalLog = console.log
 
+function setTTY(value: boolean) {
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value,
+  })
+  Object.defineProperty(process.stderr, 'isTTY', {
+    configurable: true,
+    value,
+  })
+}
+
+setTTY(true)
+
 function createSource(name: string, enabled: boolean) {
   return {
     name,
@@ -29,6 +42,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
+  setTTY(true)
   resetModuleMocks()
   console.log = originalLog
 })
@@ -174,6 +188,7 @@ describe('skill listing commands', () => {
     expect(consoleLines).toEqual([])
     expect(prompts.note).toHaveBeenCalledWith(
       'No skills found matching criteria',
+      undefined,
     )
     expect(prompts.outro).toHaveBeenCalledWith('Done')
   })

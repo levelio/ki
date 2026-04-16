@@ -3,6 +3,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mock = vi.fn
 
+function setTTY(value: boolean) {
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value,
+  })
+  Object.defineProperty(process.stderr, 'isTTY', {
+    configurable: true,
+    value,
+  })
+}
+
+setTTY(true)
+
 function createPromptMocks() {
   return {
     intro: mock(() => {}),
@@ -11,6 +24,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
+  setTTY(true)
   resetModuleMocks()
 })
 

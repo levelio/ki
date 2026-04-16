@@ -2,8 +2,22 @@ import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import { mockModule, resetModuleMocks } from 'test-mocks'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { InstalledRecord } from '../../src/installed'
 
 const mock = vi.fn
+
+function setTTY(value: boolean) {
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value,
+  })
+  Object.defineProperty(process.stderr, 'isTTY', {
+    configurable: true,
+    value,
+  })
+}
+
+setTTY(true)
 
 function createSource(name: string, enabled: boolean) {
   return {
@@ -34,6 +48,7 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
+  setTTY(true)
   resetModuleMocks()
 })
 
@@ -97,13 +112,14 @@ describe('source commands', () => {
     }))
 
     const { sourceSync } = await import('../../src/commands/sources')
-    await sourceSync(
+    const result = await sourceSync(
       {
         sources: [createSource('alpha', true)],
       },
       'missing',
     )
 
+    expect(result).toBe(false)
     expect(syncMock).not.toHaveBeenCalled()
     expect(prompts.log.error).toHaveBeenCalledWith(
       'Source not found or disabled: missing',
@@ -155,7 +171,7 @@ describe('source commands', () => {
     }))
 
     const { sourceSkills } = await import('../../src/commands/sources')
-    await sourceSkills(
+    const result = await sourceSkills(
       {
         sources: [createSource('alpha', true)],
       },
@@ -165,6 +181,7 @@ describe('source commands', () => {
 
     console.log = originalLog
 
+    expect(result).toBe(true)
     expect(consoleLines).toContain('\n  alpha (2)')
     expect(consoleLines).toContain(
       '    ✅ alpha:brainstorming (claude-code @ global)',
@@ -172,12 +189,48 @@ describe('source commands', () => {
     expect(consoleLines).toContain('    ⬜ alpha:debugging')
   })
 
+  it('sourceSkills prints an explicit empty result message', async () => {
+    const prompts = createPromptMocks()
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => []),
+      },
+    }))
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
+      loadInstalled: mock(async () => []),
+    }))
+
+    const { sourceSkills } = await import('../../src/commands/sources')
+    const result = await sourceSkills(
+      {
+        sources: [createSource('alpha', true)],
+      },
+      'alpha',
+      {},
+    )
+
+    expect(result).toBe(true)
+    expect(prompts.note).toHaveBeenCalledWith(
+      'No skills found in alpha',
+      undefined,
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('0 skill(s)')
+  })
+
   it('sourceEnable and sourceDisable mutate config and persist it', async () => {
     const prompts = createPromptMocks()
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -202,12 +255,318 @@ describe('source commands', () => {
     expect(prompts.log.warn).toHaveBeenCalledWith('Disabled source: alpha')
   })
 
+  it('sourceInstall installs every skill from a source to the requested targets', async () => {
+    const prompts = createPromptMocks()
+    const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
+    const installMock = mock(async () => {})
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
+      loadInstalled: mock(async () => []),
+      saveInstalled: saveInstalledMock,
+    }))
+    mockModule('../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'alpha:brainstorming',
+            name: 'Brainstorming',
+            _source: 'alpha',
+            _path: '/tmp/a',
+          },
+          {
+            id: 'alpha:debugging',
+            name: 'Debugging',
+            _source: 'alpha',
+            _path: '/tmp/b',
+          },
+        ]),
+        fetchContent: mock(async (skill: { id: string; _source: string }) => ({
+          id: skill.id,
+          content: `# ${skill.id}`,
+          checksum: `sha256:${skill.id}`,
+        })),
+      },
+    }))
+    mockModule('../../src/targets', () => ({
+      targetRegistry: {
+        get: mock((name: string) => {
+          if (name === 'codex') {
+            return {
+              install: installMock,
+              isInstalled: mock(async () => true),
+            }
+          }
+          return undefined
+        }),
+      },
+    }))
+
+    const { sourceInstall } = await import('../../src/commands/sources')
+    const result = await sourceInstall(
+      {
+        sources: [createSource('alpha', true)],
+        targets: [{ name: 'codex', enabled: true }],
+      },
+      'alpha',
+      { _: [], target: 'codex' },
+    )
+
+    expect(result).toBe(true)
+    expect(installMock).toHaveBeenCalledTimes(2)
+    expect(saveInstalledMock).toHaveBeenCalledWith([
+      {
+        id: 'alpha:brainstorming',
+        source: 'alpha',
+        targets: ['codex'],
+        scope: 'global',
+        checksum: 'sha256:alpha:brainstorming',
+        installedAt: expect.any(String),
+        enabled: true,
+      },
+      {
+        id: 'alpha:debugging',
+        source: 'alpha',
+        targets: ['codex'],
+        scope: 'global',
+        checksum: 'sha256:alpha:debugging',
+        installedAt: expect.any(String),
+        enabled: true,
+      },
+    ])
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      'Installed alpha:brainstorming (codex @ global)',
+    )
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      'Installed alpha:debugging (codex @ global)',
+    )
+  })
+
+  it('sourceInstall saves earlier successful installs when a later skill fetch fails', async () => {
+    const prompts = createPromptMocks()
+    const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
+    const installMock = mock(async () => {})
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
+      loadInstalled: mock(async () => []),
+      saveInstalled: saveInstalledMock,
+    }))
+    mockModule('../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'alpha:brainstorming',
+            name: 'Brainstorming',
+            _source: 'alpha',
+            _path: '/tmp/a',
+          },
+          {
+            id: 'alpha:debugging',
+            name: 'Debugging',
+            _source: 'alpha',
+            _path: '/tmp/b',
+          },
+        ]),
+        fetchContent: mock(async (skill: { id: string }) => {
+          if (skill.id === 'alpha:debugging') {
+            throw new Error('broken skill')
+          }
+
+          return {
+            id: skill.id,
+            content: `# ${skill.id}`,
+            checksum: `sha256:${skill.id}`,
+          }
+        }),
+      },
+    }))
+    mockModule('../../src/targets', () => ({
+      targetRegistry: {
+        get: mock((name: string) => {
+          if (name === 'codex') {
+            return {
+              install: installMock,
+              isInstalled: mock(async () => true),
+            }
+          }
+          return undefined
+        }),
+      },
+    }))
+
+    const { sourceInstall } = await import('../../src/commands/sources')
+    const result = await sourceInstall(
+      {
+        sources: [createSource('alpha', true)],
+        targets: [{ name: 'codex', enabled: true }],
+      },
+      'alpha',
+      { _: [], target: 'codex' },
+    )
+
+    expect(result).toBe(false)
+    expect(saveInstalledMock).toHaveBeenCalledWith([
+      {
+        id: 'alpha:brainstorming',
+        source: 'alpha',
+        targets: ['codex'],
+        scope: 'global',
+        checksum: 'sha256:alpha:brainstorming',
+        installedAt: expect.any(String),
+        enabled: true,
+      },
+    ])
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Skipped alpha:debugging: failed to fetch content: broken skill',
+    )
+  })
+
+  it('sourceUninstall removes all installed skills from a source for the requested target', async () => {
+    const prompts = createPromptMocks()
+    const uninstallMock = mock(async () => {})
+    const installedRecords: InstalledRecord[] = [
+      {
+        id: 'alpha:brainstorming',
+        source: 'alpha',
+        targets: ['codex'],
+        scope: 'global',
+        checksum: 'sha256:1',
+        installedAt: '2026-04-14T00:00:00.000Z',
+        enabled: true,
+      },
+      {
+        id: 'alpha:debugging',
+        source: 'alpha',
+        targets: ['codex'],
+        scope: 'global',
+        checksum: 'sha256:2',
+        installedAt: '2026-04-14T00:00:00.000Z',
+        enabled: true,
+      },
+      {
+        id: 'beta:other',
+        source: 'beta',
+        targets: ['codex'],
+        scope: 'global',
+        checksum: 'sha256:3',
+        installedAt: '2026-04-14T00:00:00.000Z',
+        enabled: true,
+      },
+    ]
+    const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
+      loadInstalled: mock(async () => installedRecords),
+      saveInstalled: saveInstalledMock,
+    }))
+    mockModule('../../src/targets', () => ({
+      targetRegistry: {
+        get: mock((name: string) => {
+          if (name === 'codex') {
+            return {
+              uninstall: uninstallMock,
+              isInstalled: mock(async () => false),
+            }
+          }
+          return undefined
+        }),
+      },
+    }))
+
+    const { sourceUninstall } = await import('../../src/commands/sources')
+    const result = await sourceUninstall(
+      {
+        sources: [createSource('alpha', true)],
+      },
+      'alpha',
+      { _: [], target: 'codex', global: true },
+    )
+
+    expect(result).toBe(true)
+    expect(uninstallMock).toHaveBeenCalledTimes(2)
+    expect(uninstallMock).toHaveBeenCalledWith('alpha:brainstorming', {
+      scope: 'global',
+    })
+    expect(uninstallMock).toHaveBeenCalledWith('alpha:debugging', {
+      scope: 'global',
+    })
+    expect(saveInstalledMock).toHaveBeenCalledWith([
+      {
+        id: 'beta:other',
+        source: 'beta',
+        targets: ['codex'],
+        scope: 'global',
+        checksum: 'sha256:3',
+        installedAt: '2026-04-14T00:00:00.000Z',
+        enabled: true,
+      },
+    ])
+  })
+
+  it('sourceUninstall removes records for unavailable targets', async () => {
+    const prompts = createPromptMocks()
+    const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../src/installed')>(
+        '../../src/installed',
+      )),
+      loadInstalled: mock(async () => [
+        {
+          id: 'alpha:brainstorming',
+          source: 'alpha',
+          targets: ['missing-target'],
+          scope: 'global',
+          checksum: 'sha256:1',
+          installedAt: '2026-04-14T00:00:00.000Z',
+          enabled: true,
+        },
+      ]),
+      saveInstalled: saveInstalledMock,
+    }))
+    mockModule('../../src/targets', () => ({
+      targetRegistry: {
+        get: mock(() => undefined),
+      },
+    }))
+
+    const { sourceUninstall } = await import('../../src/commands/sources')
+    const result = await sourceUninstall(
+      {
+        sources: [createSource('alpha', true)],
+      },
+      'alpha',
+      { _: [], target: 'missing-target', global: true },
+    )
+
+    expect(result).toBe(true)
+    expect(saveInstalledMock).toHaveBeenCalledWith([])
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Removed install record for alpha:brainstorming from missing-target without running a target uninstall because the target is unavailable',
+    )
+  })
+
   it('sourceAdd adds a git source with an inferred name and rejects duplicates', async () => {
     const prompts = createPromptMocks()
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -241,7 +600,10 @@ describe('source commands', () => {
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -280,7 +642,10 @@ describe('source commands', () => {
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -307,7 +672,10 @@ describe('source commands', () => {
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -331,7 +699,10 @@ describe('source commands', () => {
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -358,7 +729,10 @@ describe('source commands', () => {
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -396,7 +770,10 @@ describe('source commands', () => {
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 
@@ -438,7 +815,10 @@ describe('source commands', () => {
     const saveConfigMock = mock(async (_config: unknown) => {})
 
     mockModule('@clack/prompts', () => prompts)
-    mockModule('../../src/config', () => ({
+    mockModule('../../src/config', async () => ({
+      ...(await vi.importActual<typeof import('../../src/config')>(
+        '../../src/config',
+      )),
       saveConfig: saveConfigMock,
     }))
 

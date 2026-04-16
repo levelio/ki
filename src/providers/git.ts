@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 // src/providers/git.ts
 import { mkdir, readFile, readdir } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { getKiCacheDir } from '@/config'
 import type { Provider, SkillContent, SkillMeta, SourceConfig } from '@/types'
 import { computeFileChecksum } from '@/utils'
 
@@ -43,9 +43,7 @@ import { computeFileChecksum } from '@/utils'
 export class GitProvider implements Provider {
   name = 'git'
 
-  constructor(
-    private readonly cacheDir = join(homedir(), '.config', 'ki', 'cache'),
-  ) {}
+  constructor(private readonly cacheDir = getKiCacheDir()) {}
 
   async discover(config: SourceConfig): Promise<SkillMeta[]> {
     const cachePath = this.getCachePath(config)

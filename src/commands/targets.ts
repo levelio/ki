@@ -1,6 +1,6 @@
-import * as p from '@clack/prompts'
 import { targetRegistry } from '../targets'
 import type { Config } from '../types'
+import * as p from '../ui'
 
 export async function targetList(config: Pick<Config, 'targets'>) {
   p.intro('Targets')

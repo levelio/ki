@@ -1,14 +1,12 @@
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import * as p from '@clack/prompts'
-import { saveConfig } from '../config'
+import { getKiConfigFile, saveConfig } from '../config'
 import { DEFAULT_CONFIG } from '../types'
+import * as p from '../ui'
 
 export async function initConfig() {
   p.intro('Initialize Config')
 
-  const configPath = join(homedir(), '.config', 'ki', 'config.yaml')
+  const configPath = getKiConfigFile()
 
   if (existsSync(configPath)) {
     const overwrite = await p.confirm({

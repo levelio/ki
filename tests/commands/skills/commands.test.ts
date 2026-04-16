@@ -5,6 +5,19 @@ import type { InstalledRecord } from '../../../src/installed'
 const originalLog = console.log
 const mock = vi.fn
 
+function setTTY(value: boolean) {
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value,
+  })
+  Object.defineProperty(process.stderr, 'isTTY', {
+    configurable: true,
+    value,
+  })
+}
+
+setTTY(true)
+
 function createSource(name = 'source') {
   return {
     name,
@@ -38,12 +51,13 @@ function createPromptMocks() {
 }
 
 afterEach(() => {
+  setTTY(true)
   resetModuleMocks()
   console.log = originalLog
 })
 
 describe('skill command non-interactive flows', () => {
-  it('installSkill records only successfully installed targets', async () => {
+  it('installSkill records successful targets but fails the command on partial target errors', async () => {
     const prompts = createPromptMocks()
     const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
     const installSuccess = mock(async () => {})
@@ -79,7 +93,12 @@ describe('skill command non-interactive flows', () => {
     mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
-          if (name === 'claude-code') return { install: installSuccess }
+          if (name === 'claude-code') {
+            return {
+              install: installSuccess,
+              isInstalled: mock(async () => true),
+            }
+          }
           if (name === 'codex') return { install: installFailure }
           return undefined
         }),
@@ -89,7 +108,7 @@ describe('skill command non-interactive flows', () => {
     const { installSkill } = await import(
       '../../../src/commands/skills/install'
     )
-    await installSkill(
+    const result = await installSkill(
       {
         sources: [createSource()],
         targets: [
@@ -117,13 +136,14 @@ describe('skill command non-interactive flows', () => {
         enabled: true,
       },
     ])
+    expect(result).toBe(false)
     const installSpinner = prompts.spinner.mock.results[0]?.value as {
       stop: ReturnType<typeof mock>
     }
     expect(installSpinner.stop).toHaveBeenCalledWith(
-      'Installed 1 skill instance(s) to 1 target(s) in global',
+      'Installed 1 skill instance(s) to 1 target(s) with errors',
     )
-    expect(prompts.outro).toHaveBeenCalledWith('Done')
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
   })
 
   it('installSkill supports dry-run without installing or writing records', async () => {
@@ -167,7 +187,7 @@ describe('skill command non-interactive flows', () => {
     const { installSkill } = await import(
       '../../../src/commands/skills/install'
     )
-    await installSkill(
+    const result = await installSkill(
       {
         sources: [createSource()],
         targets: [{ name: 'codex', enabled: true }],
@@ -181,8 +201,140 @@ describe('skill command non-interactive flows', () => {
     expect(consoleLines).toContain(
       '  Would install source:alpha (codex @ global)',
     )
+    expect(result).toBe(true)
     expect(prompts.outro).toHaveBeenCalledWith(
       'Dry run: 1 skill instance(s) would be installed',
+    )
+  })
+
+  it('installSkill returns failure without writing records when no target installs succeed', async () => {
+    const prompts = createPromptMocks()
+    const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
+    const installFailure = mock(async () => {
+      throw new Error('boom')
+    })
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
+      loadInstalled: mock(async () => []),
+      saveInstalled: saveInstalledMock,
+    }))
+    mockModule('../../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+        ]),
+        fetchContent: mock(async () => ({
+          id: 'source:alpha',
+          content: '# Alpha',
+          checksum: 'sha256:new',
+        })),
+      },
+    }))
+    mockModule('../../../src/targets', () => ({
+      targetRegistry: {
+        get: mock((name: string) => {
+          if (name === 'claude-code') return { install: installFailure }
+          return undefined
+        }),
+      },
+    }))
+
+    const { installSkill } = await import(
+      '../../../src/commands/skills/install'
+    )
+    const result = await installSkill(
+      {
+        sources: [createSource()],
+        targets: [{ name: 'claude-code', enabled: true }],
+      },
+      { _: ['source:alpha'], target: 'claude-code' },
+    )
+
+    expect(result).toBe(false)
+    expect(installFailure).toHaveBeenCalledTimes(1)
+    expect(saveInstalledMock).toHaveBeenCalledWith([])
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Skipped recording source:alpha: no targets installed successfully',
+    )
+    const installSpinner = prompts.spinner.mock.results[0]?.value as {
+      stop: ReturnType<typeof mock>
+    }
+    expect(installSpinner.stop).toHaveBeenCalledWith(
+      'Installed 0 skill instance(s) to 0 target(s) with errors',
+    )
+    expect(prompts.outro).toHaveBeenCalledWith('Failed')
+  })
+
+  it('installSkill does not record a target when post-install verification fails', async () => {
+    const prompts = createPromptMocks()
+    const saveInstalledMock = mock(async (_records: InstalledRecord[]) => {})
+    const installMock = mock(async () => {})
+
+    mockModule('@clack/prompts', () => prompts)
+    mockModule('../../../src/installed', async () => ({
+      ...(await vi.importActual<typeof import('../../../src/installed')>(
+        '../../../src/installed',
+      )),
+      loadInstalled: mock(async () => []),
+      saveInstalled: saveInstalledMock,
+    }))
+    mockModule('../../../src/providers', () => ({
+      providerRegistry: {
+        discoverAll: mock(async () => [
+          {
+            id: 'source:alpha',
+            name: 'Alpha',
+            _source: 'source',
+            _path: '/tmp/alpha/SKILL.md',
+          },
+        ]),
+        fetchContent: mock(async () => ({
+          id: 'source:alpha',
+          content: '# Alpha',
+          checksum: 'sha256:new',
+        })),
+      },
+    }))
+    mockModule('../../../src/targets', () => ({
+      targetRegistry: {
+        get: mock((name: string) => {
+          if (name === 'codex') {
+            return {
+              install: installMock,
+              isInstalled: mock(async () => false),
+            }
+          }
+
+          return undefined
+        }),
+      },
+    }))
+
+    const { installSkill } = await import(
+      '../../../src/commands/skills/install'
+    )
+    const result = await installSkill(
+      {
+        sources: [createSource()],
+        targets: [{ name: 'codex', enabled: true }],
+      },
+      { _: ['source:alpha'], target: 'codex' },
+    )
+
+    expect(result).toBe(false)
+    expect(installMock).toHaveBeenCalledTimes(1)
+    expect(saveInstalledMock).toHaveBeenCalledWith([])
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Install verification failed for source:alpha on codex: target did not report the skill after install',
     )
   })
 
@@ -335,7 +487,12 @@ describe('skill command non-interactive flows', () => {
     mockModule('../../../src/targets', () => ({
       targetRegistry: {
         get: mock((name: string) => {
-          if (name === 'claude-code') return { uninstall: uninstallMock }
+          if (name === 'claude-code') {
+            return {
+              uninstall: uninstallMock,
+              isInstalled: mock(async () => false),
+            }
+          }
           return undefined
         }),
       },
@@ -840,7 +997,10 @@ describe('skill command non-interactive flows', () => {
       { project: true, _: [] },
     )
 
-    expect(prompts.note).toHaveBeenCalledWith('No matching installed skills')
+    expect(prompts.note).toHaveBeenCalledWith(
+      'No matching installed skills',
+      undefined,
+    )
     expect(prompts.outro).toHaveBeenCalledWith('Done')
     expect(syncMock).not.toHaveBeenCalled()
     expect(discoverAllMock).not.toHaveBeenCalled()

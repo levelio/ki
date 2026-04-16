@@ -1,11 +1,10 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { getKiConfigDir, getKiInstalledFile } from './config'
 import type { CliFlags, InstallOptions } from './types'
 
-const DATA_DIR = join(homedir(), '.config', 'ki')
-const INSTALLED_FILE = join(DATA_DIR, 'installed.json')
+const DATA_DIR = getKiConfigDir()
+const INSTALLED_FILE = getKiInstalledFile()
 
 interface InstalledRecordBase {
   id: string

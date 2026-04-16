@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, statSync } from 'node:fs'
+import { existsSync, lstatSync } from 'node:fs'
 import {
   mkdir,
   readdir,
@@ -31,6 +31,10 @@ export class CursorTarget implements Target {
     return join(projectPath, '.cursor', 'skills')
   }
 
+  resolveInstalledId(skillId: string): string {
+    return this.getSkillName(skillId)
+  }
+
   async install(skill: SkillContent, options?: InstallOptions): Promise<void> {
     const basePath =
       options?.scope === 'project' && options.projectPath
@@ -60,6 +64,20 @@ export class CursorTarget implements Target {
     if (existsSync(skillDir)) {
       await rm(skillDir, { recursive: true, force: true })
     }
+  }
+
+  async isInstalled(
+    skillId: string,
+    options?: InstallOptions,
+  ): Promise<boolean> {
+    const basePath =
+      options?.scope === 'project' && options.projectPath
+        ? this.getProjectPath(options.projectPath)
+        : this.getGlobalPath()
+
+    const skillDir = join(basePath, this.getSkillName(skillId))
+    const skillFile = join(skillDir, 'SKILL.md')
+    return existsSync(skillFile)
   }
 
   async list(
@@ -197,14 +215,9 @@ ${skill.content}`
     const targetDir = join(targetPath, '..')
     await mkdir(targetDir, { recursive: true })
 
-    // On Windows, use junction for directory symlinks (doesn't require admin)
-    // For files, use regular symlink (requires admin on Windows)
     if (isWindows()) {
-      // On Windows, for file symlinks use junction type
-      // This allows creating symlinks without admin privileges
-      await symlink(sourcePath, targetPath, 'junction')
+      await symlink(sourcePath, targetPath, 'file')
     } else {
-      // On Unix/macOS, use regular symlink
       await symlink(sourcePath, targetPath)
     }
   }

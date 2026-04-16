@@ -11,6 +11,19 @@ const originalLog = console.log
 const missingGlobalPath = join(homedir(), '.agents', 'skills')
 const missingProjectPath = '/tmp/ki-doctor-missing-project-path-7f4f2b38'
 
+function setTTY(value: boolean) {
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value,
+  })
+  Object.defineProperty(process.stderr, 'isTTY', {
+    configurable: true,
+    value,
+  })
+}
+
+setTTY(true)
+
 function createPromptMocks() {
   return {
     intro: mock(() => {}),
@@ -46,6 +59,7 @@ async function importDoctorModule() {
 }
 
 afterEach(() => {
+  setTTY(true)
   resetModuleMocks()
   console.log = originalLog
 })
