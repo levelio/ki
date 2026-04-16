@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+### Patch Changes
+
+- 0ef40ab: Show a post-install reminder on global installs and upgrades so users are prompted to run `ki init` and `ki source sync ki`.
+
 ## 0.4.0
 
 ### Minor Changes
